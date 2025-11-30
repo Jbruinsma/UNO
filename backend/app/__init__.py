@@ -1,3 +1,3 @@
 # UNO backend app package
-__all__ = ["main", "manager"]
+__all__ = ["main", "connection_manager.py"]
 
