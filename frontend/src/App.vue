@@ -4,7 +4,7 @@ import { useGameWebSocket } from './composables/useGameWebSocket';
 import Lobby from "@/components/Lobby.vue";
 
 // We import the state here to decide what to render
-const { gameState, currentGameId } = useGameWebSocket();
+const { gameState, currentGameId, isHost, playerNames } = useGameWebSocket();
 </script>
 
 <template>
@@ -21,6 +21,8 @@ const { gameState, currentGameId } = useGameWebSocket();
     <div v-else-if="gameState === 'PLAYING'" class="game-placeholder">
       <h1>Game In Progress</h1>
       <p>Game ID: {{ currentGameId }}</p>
+      <p>Players: {{ playerNames }}</p>
+      <p>Host: {{ isHost }}</p>
     </div>
 
   </main>
