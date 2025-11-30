@@ -16,6 +16,13 @@ const { gameState, currentGameId } = useGameWebSocket();
     <div v-else-if="gameState === 'LOBBY'" class="lobby-placeholder">
       <Lobby></Lobby>
     </div>
+
+    <!-- Game In Progress -->
+    <div v-else-if="gameState === 'PLAYING'" class="game-placeholder">
+      <h1>Game In Progress</h1>
+      <p>Game ID: {{ currentGameId }}</p>
+    </div>
+
   </main>
 </template>
 

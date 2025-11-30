@@ -113,6 +113,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                         })
                         current_game_id = None
 
+                elif action == "start_game":
+                    if current_game_id:
+                        game_manager.start_game(current_game_id)
+                        await broadcast_to_room(current_game_id, {
+                            "event": "game_started",
+                            "message": "Game started!"
+                        })
+
                 else:
 
                     if current_game_id:

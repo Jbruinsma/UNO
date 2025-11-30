@@ -67,3 +67,9 @@ class GameManager:
 
             if len(game["players"]) == 0:
                 del self.games[game_id]
+
+    def start_game(self, game_id: str):
+        game = self.games.get(game_id)
+        if game:
+            game["state"] = "playing"
+        print(f"GAME STARTED: {game_id}")

@@ -20,12 +20,10 @@ const isNameConfirmed = ref(false);
 const hasName = computed(() => displayName.value.trim().length > 0);
 const isValidCode = computed(() => joinInput.value.length === 4);
 
-// Sync local state with global store on load
 onMounted(() => {
   if (playerName.value) {
     displayName.value = playerName.value;
 
-    // If we are already connected, lock the UI in "Confirmed" state
     if (isConnected.value) {
       confirmedName.value = playerName.value;
       isNameConfirmed.value = true;
@@ -75,13 +73,9 @@ const handleJoin = () => {
     <div class="content-box">
       <h1 class="title">UNO <span class="badge">ONLINE</span></h1>
 
-      <div v-if="currentError" class="error-banner">
-        {{ currentError }}
-      </div>
-
-      <div class="status-indicator">
+      <div v-if="isConnected" class="status-indicator">
         <div class="dot" :class="{ active: isConnected }"></div>
-        <span>{{ isConnected ? 'Server Online' : 'Connecting...' }}</span>
+        <span>Connected'</span>
       </div>
 
       <div class="input-group name-group">
@@ -152,6 +146,9 @@ const handleJoin = () => {
               Join
             </button>
           </div>
+          <div v-if="currentError" class="error-banner">
+        {{ currentError }}
+      </div>
         </div>
       </div>
     </div>
@@ -390,7 +387,7 @@ const handleJoin = () => {
   color: #991b1b;
   padding: 12px;
   border-radius: 8px;
-  margin-bottom: 20px;
+  margin-top: 20px;
   font-size: 0.9rem;
   font-weight: 600;
 }
