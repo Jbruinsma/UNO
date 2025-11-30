@@ -1,0 +1,100 @@
+# ==========================
+# GENERAL / OS
+# ==========================
+.DS_Store
+Thumbs.db
+*.log
+
+# ==========================
+# PYTHON (FastAPI Backend)
+# ==========================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments (Very Important)
+venv/
+.venv/
+env/
+ENV/
+
+# Unit Test / Coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# ==========================
+# NODE.JS / VUE (Frontend)
+# ==========================
+# Dependencies
+node_modules/
+
+# Production Build Output
+/frontend/dist/
+
+# Testing
+/frontend/coverage/
+
+# Local Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# ==========================
+# IDE / EDITOR SETTINGS
+# ==========================
+# PyCharm / IntelliJ (User specific settings)
+.idea/
+*.iml
+*.iws
+
+# VS Code
+.vscode/
+
+# ==========================
+# DATABASES / LOCAL STORAGE
+# ==========================
+*.sqlite3
+*.db
+# Ignore local SQL dumps, but keep schema.sql if you have one
+*.sql
+!schema.sql
+
+# ==========================
+# MISC
+# ==========================
+# PyCharm creates this for file watchers
+.history/
