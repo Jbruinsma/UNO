@@ -29,5 +29,3 @@ const { gameState, currentGameId } = useGameWebSocket();
 <style>
 body { margin: 0; padding: 0; }
 </style>
-
-Now, when you click **Create Game**, the backend will reply, the composable will switch `gameState` to `'LOBBY'`, and `App.vue` will automatically swap the UI from the landing page to the "Lobby Placeholder".
