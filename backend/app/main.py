@@ -114,12 +114,33 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                         current_game_id = None
 
                 elif action == "start_game":
+
                     if current_game_id:
-                        game_manager.start_game(current_game_id)
-                        await broadcast_to_room(current_game_id, {
-                            "event": "game_started",
-                            "message": "Game started!"
-                        })
+                        game_state = game_manager.start_game(current_game_id)
+                        players = game_state["players"]
+                        player_cards = game_state["player_cards"]
+
+                        start_index = game_state["current_player_index"]
+                        first_player_id = players[start_index]
+
+                        for player_id in players:
+                            msg = {
+                                "event": "game_started",
+                                "game_id": current_game_id,
+                                "top_card": game_state["discard_pile"][-1],
+                                "current_player": first_player_id,
+                                "hand": player_cards[player_id],
+                                "card_counts": {
+                                    other_player_id: len(player_cards[other_player_id])
+                                    for other_player_id in players
+                                    if other_player_id != player_id
+                                }
+                            }
+
+                            await connection_manager.send_personal_message(
+                                json.dumps(msg),
+                                player_id
+                            )
 
                 else:
 

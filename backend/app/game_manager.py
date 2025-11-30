@@ -1,4 +1,7 @@
+import random
 from typing import Dict, List, Optional
+
+from backend.app.utils import create_deck
 
 
 class GameManager:
@@ -18,12 +21,16 @@ class GameManager:
         self.games[game_id] = {
             "host_id": host_id,
             "state": "waiting",
-            "players": [host_id],  # Logic uses this list
-            "player_names": {  # UI uses this map
+            "players": [host_id],
+            "player_names": {
                 host_id: host_name
             },
+            "current_player_index": None,
+            "direction": 1,          # 1 = clockwise, -1 = counterclockwise
+
             "deck": [],
-            "discard_pile": []
+            "discard_pile": [],
+            "player_cards": {}
         }
         return self.games[game_id]
 
@@ -40,6 +47,7 @@ class GameManager:
 
         game["players"].append(user_id)
         game["player_names"][user_id] = user_name
+        game["player_cards"][user_id] = []
         return game
 
     def get_game(self, game_id: str):
@@ -70,6 +78,30 @@ class GameManager:
 
     def start_game(self, game_id: str):
         game = self.games.get(game_id)
-        if game:
-            game["state"] = "playing"
-        print(f"GAME STARTED: {game_id}")
+        if not game:
+            raise Exception("Game does not exist.")
+
+        player_ids = game["players"]
+
+        if len(player_ids) < 2:
+            raise Exception("Not enough players to start game.")
+
+        game["state"] = "playing"
+        game["deck"] = create_deck()
+
+        for player_id in player_ids:
+            game["player_cards"][player_id] = []
+
+            for _ in range(7):
+                if len(game["deck"]) > 0:
+                    card = game["deck"].pop()
+                    game["player_cards"][player_id].append(card)
+
+        if len(game["deck"]) > 0:
+            first_card = game["deck"].pop()
+            game["discard_pile"].append(first_card)
+
+        start_index = random.randint(0, len(player_ids) - 1)
+        game["current_player_index"] = start_index
+
+        return game
