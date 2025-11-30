@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket.ts';
 
 const {
@@ -8,7 +8,8 @@ const {
   isConnected,
   createGame,
   joinGame,
-  currentError
+  currentError,
+  playerName //
 } = useGameWebSocket();
 
 const joinInput = ref('');
@@ -18,6 +19,19 @@ const isNameConfirmed = ref(false);
 
 const hasName = computed(() => displayName.value.trim().length > 0);
 const isValidCode = computed(() => joinInput.value.length === 4);
+
+// Sync local state with global store on load
+onMounted(() => {
+  if (playerName.value) {
+    displayName.value = playerName.value;
+
+    // If we are already connected, lock the UI in "Confirmed" state
+    if (isConnected.value) {
+      confirmedName.value = playerName.value;
+      isNameConfirmed.value = true;
+    }
+  }
+});
 
 const handleNameInput = () => {
   if (confirmedName.value && displayName.value === confirmedName.value) {
@@ -65,9 +79,9 @@ const handleJoin = () => {
         {{ currentError }}
       </div>
 
-      <div v-if="isConnected" class="status-indicator">
+      <div class="status-indicator">
         <div class="dot" :class="{ active: isConnected }"></div>
-        <span>Connected</span>
+        <span>{{ isConnected ? 'Server Online' : 'Connecting...' }}</span>
       </div>
 
       <div class="input-group name-group">
