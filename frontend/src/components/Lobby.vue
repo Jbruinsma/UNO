@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket.ts';
 
 const {
@@ -12,20 +13,36 @@ const {
   startGame
 } = useGameWebSocket();
 
+const showNotification = ref(false);
+
 const copyCode = () => {
   if (currentGameId.value) {
     navigator.clipboard.writeText(currentGameId.value);
-    alert("Code copied to clipboard!");
+    showNotification.value = true;
+
+    setTimeout(() => {
+      showNotification.value = false;
+    }, 3000);
   }
 };
 
 const getInitials = (name: string) => {
-  return name ? name.substring(0, 2).toUpperCase() : '??';
+  return name ? name.substring(0, 1).toUpperCase() : '??';
 };
 </script>
 
 <template>
   <div class="lobby-container">
+
+    <Transition name="toast">
+      <div v-if="showNotification" class="copy-notification">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="toast-icon">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0 1 18 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3 1.5 1.5 3-3.75" />
+        </svg>
+        <span>Lobby Code Copied!</span>
+      </div>
+    </Transition>
+
     <div class="lobby-card">
 
       <div class="lobby-header">
@@ -418,5 +435,45 @@ const getInitials = (name: string) => {
 
 .list-leave-active {
   position: absolute; /* Ensures smooth removal flow */
+}
+
+/* --- Toast Notification --- */
+.copy-notification {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%); /* Centers it horizontally */
+
+  background: #1e293b; /* Dark slate background */
+  color: white;
+  padding: 12px 24px;
+  border-radius: 50px; /* Pill shape */
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+  z-index: 100; /* Ensure it sits on top of everything */
+  font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.toast-icon {
+  width: 24px;
+  height: 24px;
+  color: #4ade80; /* Bright green for success */
+}
+
+/* Toast Animation (Slide down and fade) */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px); /* Starts slightly higher */
 }
 </style>
