@@ -11,20 +11,23 @@ class GameManager:
         # Key: game_id, Value: Dict containing game state
         self.games: Dict[str, Dict] = {}
 
-    def create_game(self, game_id: str, host_id: str):
+    def create_game(self, game_id: str, host_id: str, host_name: str):
         if game_id in self.games:
             raise Exception("Game ID collision. Try again.")
 
         self.games[game_id] = {
             "host_id": host_id,
             "state": "waiting",
-            "players": [host_id],
+            "players": [host_id],  # Logic uses this list
+            "player_names": {  # UI uses this map
+                host_id: host_name
+            },
             "deck": [],
             "discard_pile": []
         }
         return self.games[game_id]
 
-    def join_game(self, game_id: str, user_id: str):
+    def join_game(self, game_id: str, user_id: str, user_name: str):
         game = self.games.get(game_id)
         if not game:
             raise Exception("Game does not exist.")
@@ -36,6 +39,7 @@ class GameManager:
             return game
 
         game["players"].append(user_id)
+        game["player_names"][user_id] = user_name
         return game
 
     def get_game(self, game_id: str):
@@ -50,11 +54,16 @@ class GameManager:
         """Handle player leaving a room."""
         if game_id in self.games:
             game = self.games[game_id]
+
+            # Remove name mapping
+            if "player_names" in game and user_id in game["player_names"]:
+                del game["player_names"][user_id]
+
+            # Remove from logic list
             if user_id in game["players"]:
                 if user_id == game["host_id"]:
                     game["host_id"] = game["players"][1] if len(game["players"]) > 1 else None
                 game["players"].remove(user_id)
 
-            # If empty, delete game
             if len(game["players"]) == 0:
                 del self.games[game_id]

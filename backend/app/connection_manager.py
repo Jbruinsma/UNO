@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import WebSocket
 import asyncio
 
@@ -6,7 +6,7 @@ import asyncio
 class ConnectionManager:
     """
     Manages the raw WebSocket connections.
-    Acts as the 'Phone Book' mapping User IDs to WebSockets.
+    Acts as the 'Phone Book' mapping User IDs to WebSockets and Names.
     """
 
     def __init__(self) -> None:
@@ -16,9 +16,12 @@ class ConnectionManager:
         # Map User ID -> WebSocket (For sending messages to specific people)
         self.user_connections: Dict[str, WebSocket] = {}
 
+        # Map User ID -> Display Name
+        self.user_names: Dict[str, str] = {}
+
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, user_id: str) -> None:
+    async def connect(self, websocket: WebSocket, user_id: str, display_name: str) -> None:
         await websocket.accept()
         async with self._lock:
             if user_id in self.user_connections:
@@ -32,6 +35,7 @@ class ConnectionManager:
 
             self.active_connections[websocket] = user_id
             self.user_connections[user_id] = websocket
+            self.user_names[user_id] = display_name
 
     async def disconnect(self, websocket: WebSocket) -> str | None:
         """Removes the connection and returns the user_id that left."""
@@ -41,7 +45,13 @@ class ConnectionManager:
                 del self.active_connections[websocket]
                 if user_id in self.user_connections:
                     del self.user_connections[user_id]
+                if user_id in self.user_names:
+                    del self.user_names[user_id]
             return user_id
+
+    async def get_name(self, user_id: str) -> str:
+        """Helper to retrieve a display name by ID."""
+        return self.user_names.get(user_id, "Unknown")
 
     async def send_personal_message(self, message: str, user_id: str):
         """Send a message to a specific user by ID."""
