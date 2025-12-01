@@ -18,10 +18,12 @@ const playerNames = ref<Record<string, string>>({}); // Map: ID -> Name
 
 // --- NEW: In-Game State ---
 const myHand = ref<string[]>([]);
+const currentActiveColor = ref<string>("");
 const topCard = ref<string>("");
 const currentPlayerId = ref<string>("");
 const direction = ref<number>(1); // 1 for clockwise, -1 for counter-clockwise
 const otherPlayerCardCounts = ref<Record<string, number>>({}) // {uuid: cardCount}
+const event = ref<Record<string, any>>({});
 const lockDrawableCardPile = ref<boolean>(false);
 const lockDrawableDeck = ref<boolean>(false);
 
@@ -107,11 +109,19 @@ export function useGameWebSocket() {
 
       case "game_update":
         console.log("Game Update:", data);
+        if (data.current_active_color) currentActiveColor.value = data.current_active_color;
         if (data.top_card) topCard.value = data.top_card;
         if (data.current_player) currentPlayerId.value = data.current_player;
         if (data.hand) myHand.value = data.hand;
-        if (data.direction) direction.value = data.direction;
         if (data.card_counts) otherPlayerCardCounts.value = data.card_counts;
+
+        if (data.direction) {
+          const newDirection = data.direction;
+          if ([-1, 1].includes(newDirection) && newDirection !== direction.value) direction.value = newDirection;
+        }
+
+        if (data.game_event) event.value = data.game_event;
+
         break;
 
       case "error":
@@ -155,7 +165,6 @@ export function useGameWebSocket() {
     }
   };
 
-  // --- NEW: In-Game Actions ---
   const playCard = (card: string) => {
 
     console.log("Playing card:", card);
@@ -183,7 +192,14 @@ export function useGameWebSocket() {
     }
   };
 
-  // --- Computeds ---
+  const changeColorWithWild = (color: string) => {
+    if (socket.value) { socket.value.send(JSON.stringify({action: "process_turn", extra: {action: "change_color_with_wild", card: color}})); }
+  }
+
+  const changeColorWithWildAndDraw4 = (color: string) => {
+    if (socket.value) { socket.value.send(JSON.stringify({action: "process_turn", extra: {action: "change_color_with_wild_and_draw4", card: color}})); }
+  }
+
   const isHost = computed(() => playerId.value === hostId.value);
   const isMyTurn = computed(() => playerId.value === currentPlayerId.value);
 
@@ -196,11 +212,13 @@ export function useGameWebSocket() {
     currentGameId,
     direction,
     otherPlayerCardCounts,
+    event,
     gameState,
     players,
     playerNames,
     hostId,
     myHand,
+    currentActiveColor,
     topCard,
     currentPlayerId,
 
@@ -216,6 +234,8 @@ export function useGameWebSocket() {
     leaveGame,
     startGame,
     playCard,
-    drawCard
+    drawCard,
+    changeColorWithWild,
+    changeColorWithWildAndDraw4,
   };
 }

@@ -2,12 +2,12 @@ import random
 
 SPECIAL_CARDS = ['S', 'R', 'D2']
 WILD_CARDS = ['W-Wild', 'W-W4']
+REGULAR_CARDS = ['R', 'B', 'G', 'Y']
 
 def create_deck():
     deck = []
-    colors = ['R', 'B', 'G', 'Y']
 
-    for color in colors:
+    for color in REGULAR_CARDS:
         deck.append(f"{color}-0")
 
         for i in range(1, 10):
@@ -24,3 +24,13 @@ def create_deck():
 
     random.shuffle(deck)
     return deck
+
+def advance_turn_counter(current_player_index: int, player_count: int, is_clockwise: bool):
+    if is_clockwise:
+        return 0 if current_player_index == player_count - 1 else current_player_index + 1
+    else:
+        return player_count - 1 if current_player_index == 0 else current_player_index - 1
+
+
+def retrieve_card_info(card: str):
+    return card[0], card[-1]

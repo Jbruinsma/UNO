@@ -200,6 +200,8 @@ async def send_game_update(game_state: dict, current_game_id: str, event: str = 
         msg = {
             "event": event,
             "game_id": current_game_id,
+            "current_active_color": game_state["current_active_color"],
+            "direction": game_state["direction"],
             "top_card": game_state["discard_pile"][-1],
             "current_player": current_player_id,
             "hand": player_cards[player_id],
@@ -207,7 +209,8 @@ async def send_game_update(game_state: dict, current_game_id: str, event: str = 
                 other_player_id: len(player_cards[other_player_id])
                 for other_player_id in players
                 if other_player_id != player_id
-            }
+            },
+            "game_event": game_state["event"]
         }
 
         await connection_manager.send_personal_message(

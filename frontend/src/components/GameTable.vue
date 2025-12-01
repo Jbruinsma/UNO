@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch, ref } from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket';
 
 const {
@@ -7,14 +7,23 @@ const {
   playerNames,
   playerId,
   myHand,
+  currentActiveColor, // <--- Key Variable
   topCard,
   currentPlayerId,
   isMyTurn,
   playCard,
   drawCard,
+  changeColorWithWild,
+  changeColorWithWildAndDraw4,
   direction,
-  otherPlayerCardCounts
+  otherPlayerCardCounts,
+  event
 } = useGameWebSocket();
+
+// --- Local State ---
+const showReverseAnimation = ref(false);
+const showColorPicker = ref(false);
+const wildCardIsDraw4 = ref<boolean>(false);
 
 // Filter opponents (Everyone except me)
 const opponents = computed(() => players.value.filter(p => p !== playerId.value));
@@ -77,6 +86,18 @@ const getCardMeta = (cardCode: string) => {
   };
 };
 
+// --- Active Color Helper ---
+// Maps the single char code 'R' to css hex for UI highlights
+const getActiveColorHex = computed(() => {
+  switch (currentActiveColor.value) {
+    case 'R': return '#ef4444';
+    case 'B': return '#3b82f6';
+    case 'G': return '#22c55e';
+    case 'Y': return '#eab308';
+    default: return 'transparent'; // No glow if no active color or neutral
+  }
+});
+
 // --- Game Logic: Playable Check ---
 const isCardPlayable = (card: string) => {
   if (!topCard.value) return false;
@@ -87,10 +108,14 @@ const isCardPlayable = (card: string) => {
   // 1. Wild cards are always playable (W-Wild, W-W4)
   if (cColor === 'W') return true;
 
-  // 2. Match Color
-  if (cColor === tColor) return true;
+  // 2. Match Active Color (Backend Logic)
+  // If we have a forced active color (from a previous Wild), match that.
+  // Otherwise, match the top card's color.
+  const targetColor = currentActiveColor.value || tColor;
+  if (cColor === targetColor) return true;
 
   // 3. Match Value (e.g. 5==5, S==S, R==R)
+  // Value matching always works regardless of color
   if (cValue === tValue) return true;
 
   return false;
@@ -102,54 +127,119 @@ const handleCardClick = (card: string) => {
     playCard(card);
   }
 };
+
+const handleColorSelect = (color: string) => {
+  if (wildCardIsDraw4.value) { changeColorWithWildAndDraw4(color) }
+  else { changeColorWithWild(color); }
+  showColorPicker.value = false;
+  wildCardIsDraw4.value = false;
+};
+
+watch(event, (newEvent) => {
+  console.log("NEW EVENT: ", newEvent);
+
+  const eventType = newEvent.type;
+  const originPlayerId = newEvent.player_id;
+
+  if (eventType === 'reverse') {
+    showReverseAnimation.value = true;
+    setTimeout(() => {
+      showReverseAnimation.value = false;
+    }, 2000);
+
+  } else if (eventType === 'skip'){
+    // Handle skip if needed
+  } else if (eventType === 'wild_color_pick') {
+    // Check if I am the one who needs to pick (origin matches my ID)
+    if (playerId.value === originPlayerId) {
+      showColorPicker.value = true;
+    }
+  } else if (eventType === 'wild_color_pick_draw4') {
+    // Often handled same as normal wild color pick
+    if (playerId.value === originPlayerId) {
+      showColorPicker.value = true;
+      wildCardIsDraw4.value = true;
+    }
+  }
+});
 </script>
 
 <template>
   <div class="game-container">
 
-    <!-- CIRCULAR TABLE SURFACE -->
+    <div v-if="showReverseAnimation" class="reverse-overlay">
+      <div class="reverse-icon">⇄</div>
+      <div class="reverse-text">REVERSED!</div>
+    </div>
+
+    <div v-if="showColorPicker" class="picker-backdrop">
+      <div class="picker-modal">
+        <h2 class="picker-title">CHOOSE A COLOR</h2>
+        <div class="color-grid">
+          <button class="color-btn red" @click="handleColorSelect('R')"></button>
+          <button class="color-btn blue" @click="handleColorSelect('B')"></button>
+          <button class="color-btn green" @click="handleColorSelect('G')"></button>
+          <button class="color-btn yellow" @click="handleColorSelect('Y')"></button>
+        </div>
+      </div>
+    </div>
+
     <div class="table-surface">
 
-      <!-- DIRECTION INDICATOR RING -->
       <div
         class="direction-ring"
         :class="{ 'counter-clockwise': direction === -1 }"
       >
         <svg viewBox="0 0 100 100" class="arrow-svg">
-          <path id="curve" d="M 10,50 a 40,40 0 1,1 80,0 a 40,40 0 1,1 -80,0" fill="transparent" />
-          <text width="500">
-            <textPath xlink:href="#curve" class="arrow-text">
-              ➤ &nbsp;&nbsp;&nbsp; ➤ &nbsp;&nbsp;&nbsp; ➤ &nbsp;&nbsp;&nbsp; ➤ &nbsp;&nbsp;&nbsp;
-            </textPath>
-          </text>
+          <defs>
+            <symbol id="icon-left" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 15.75 3 12m0 0 3.75-3.75M3 12h18" />
+            </symbol>
+            <symbol id="icon-right" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+            </symbol>
+          </defs>
+
+          <g
+            v-for="i in 8"
+            :key="i"
+            :transform="`rotate(${(i - 1) * 45}, 50, 50)`"
+          >
+            <use
+              :href="direction === 1 ? '#icon-right' : '#icon-left'"
+              x="46"
+              y="6"
+              width="8"
+              height="8"
+            />
+          </g>
         </svg>
       </div>
 
-      <!-- CENTER PILES -->
       <div class="center-area">
 
-        <!-- DRAW PILE -->
         <div class="card-pile draw-pile" @click="drawCard">
           <div class="playing-card card-back">
             <span class="inner-logo">UNO</span>
           </div>
         </div>
 
-        <!-- DISCARD PILE -->
         <div class="card-pile discard-pile">
+          <div
+             class="active-color-glow"
+             :style="{ borderColor: getActiveColorHex, boxShadow: `0 0 30px ${getActiveColorHex}` }"
+          ></div>
+
           <div
             v-if="topCard"
             class="playing-card face-up"
             :style="{ backgroundColor: getCardMeta(topCard).bg }"
           >
-            <!-- Background Wild Pattern -->
             <div v-if="getCardMeta(topCard).isWild" class="wild-bg"></div>
 
-            <!-- Corner Labels -->
             <span class="corner-label top-left">{{ getCardMeta(topCard).label }}</span>
             <span class="corner-label bottom-right">{{ getCardMeta(topCard).label }}</span>
 
-            <!-- Main Center Value -->
             <span class="card-value">{{ getCardMeta(topCard).label }}</span>
           </div>
           <div v-else class="card-placeholder"></div>
@@ -157,7 +247,6 @@ const handleCardClick = (card: string) => {
 
       </div>
 
-      <!-- OPPONENTS -->
       <div
         v-for="(opId, index) in opponents"
         :key="opId"
@@ -173,7 +262,6 @@ const handleCardClick = (card: string) => {
             <span class="op-name">{{ playerNames[opId] }}</span>
           </div>
 
-          <!-- Opponent Hand (Mini Cards) -->
           <div class="mini-hand">
             <div
               v-for="n in (otherPlayerCardCounts[opId] || 0)"
@@ -188,12 +276,10 @@ const handleCardClick = (card: string) => {
 
     </div>
 
-    <!-- TURN BANNER -->
     <div class="turn-banner" :class="{ 'my-turn': isMyTurn }">
       {{ isMyTurn ? "YOUR TURN" : `${playerNames[currentPlayerId] || 'Someone'}'s Turn` }}
     </div>
 
-    <!-- MY HAND -->
     <div class="my-hand-container">
       <div class="hand-scroll">
         <div
@@ -207,14 +293,11 @@ const handleCardClick = (card: string) => {
           :style="{ backgroundColor: getCardMeta(card).bg }"
           @click="handleCardClick(card)"
         >
-          <!-- Background Wild Pattern -->
           <div v-if="getCardMeta(card).isWild" class="wild-bg"></div>
 
-          <!-- Corner Labels -->
           <span class="corner-label top-left">{{ getCardMeta(card).label }}</span>
           <span class="corner-label bottom-right">{{ getCardMeta(card).label }}</span>
 
-          <!-- Main Center Value -->
           <span class="card-value">{{ getCardMeta(card).label }}</span>
         </div>
       </div>
@@ -225,44 +308,115 @@ const handleCardClick = (card: string) => {
 
 <style scoped>
 .game-container {
-  height: 100vh;
-  width: 100vw;
   background: #0f172a;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   font-family: 'Segoe UI', sans-serif;
+  height: 100vh;
+  overflow: hidden;
   position: relative;
+  width: 100vw;
 }
 
 /* --- THE TABLE --- */
 .table-surface {
-  position: absolute;
-  top: 45%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 70vh;
-  height: 70vh;
-  border-radius: 50%;
+  align-items: center;
   background: radial-gradient(circle, #334155 0%, #1e293b 70%);
+  border-radius: 50%;
   box-shadow: 0 0 50px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.2);
   display: flex;
-  align-items: center;
+  height: 70vh;
   justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  width: 70vh;
 }
+
+/* --- REVERSE ANIMATION --- */
+.reverse-icon { font-size: 6rem; line-height: 1; }
+.reverse-overlay {
+  align-items: center;
+  animation: pop-spin 2s ease-in-out forwards;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  border-radius: 30px;
+  color: #facc15;
+  display: flex;
+  flex-direction: column;
+  height: 250px;
+  justify-content: center;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  z-index: 200;
+}
+.reverse-text { font-size: 2rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+
+@keyframes pop-spin {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(-90deg); }
+  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(0deg); }
+  80% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(90deg); }
+}
+
+/* --- COLOR PICKER ANIMATION --- */
+.blue { background-color: #3b82f6; color: #3b82f6; }
+.color-btn {
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  cursor: pointer;
+  height: 80px;
+  transition: transform 0.1s, filter 0.1s;
+  width: 80px;
+}
+.color-btn:active { transform: scale(0.95); }
+.color-btn:hover { filter: brightness(1.2); transform: scale(1.05); }
+.color-grid { display: grid; gap: 15px; grid-template-columns: 1fr 1fr; margin-top: 25px; }
+.green { background-color: #22c55e; color: #22c55e; }
+.picker-backdrop {
+  align-items: center;
+  backdrop-filter: blur(5px);
+  background: rgba(0, 0, 0, 0.6);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 300;
+}
+.picker-modal {
+  align-items: center;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 30px 50px;
+}
+.picker-title { color: white; font-size: 1.2rem; font-weight: 800; letter-spacing: 2px; margin: 0; text-transform: uppercase; }
+.red { background-color: #ef4444; color: #ef4444; }
+.yellow { background-color: #eab308; color: #eab308; }
 
 /* --- DIRECTION RING --- */
 .direction-ring {
+  animation: rotate-cw 20s linear infinite;
+  height: 100%;
+  opacity: 0.15;
+  pointer-events: none;
   position: absolute;
   width: 100%;
-  height: 100%;
-  pointer-events: none;
-  animation: rotate-cw 20s linear infinite;
-  opacity: 0.1;
 }
 .direction-ring.counter-clockwise { animation: rotate-ccw 20s linear infinite; }
-.arrow-svg { width: 100%; height: 100%; }
-.arrow-text { font-size: 10px; fill: white; letter-spacing: 5px; }
+.arrow-svg { fill: none; height: 100%; stroke: white; stroke-width: 2; width: 100%; }
 
 @keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes rotate-ccw { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
@@ -278,20 +432,20 @@ const handleCardClick = (card: string) => {
 
 /* Shared Card Style */
 .playing-card {
-  width: 100px;
-  height: 140px;
-  border-radius: 12px;
-  background: white;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-  position: relative;
+  background: white;
   border: 4px solid white;
-  user-select: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  display: flex;
+  height: 140px;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  overflow: hidden; /* Keeps corner labels inside */
-  z-index: 1; /* Fixes overlap issue by creating a local stacking context */
+  user-select: none;
+  width: 100px;
+  z-index: 1;
 }
 
 /* --- NEW CARD FACE STYLES --- */
@@ -300,89 +454,93 @@ const handleCardClick = (card: string) => {
   font-size: 3rem;
   font-weight: 800;
   text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
-  z-index: 2; /* Sit above wild bg */
+  z-index: 2;
 }
 
 .corner-label {
-  position: absolute;
+  color: white;
   font-size: 0.9rem;
   font-weight: 800;
-  color: white;
+  position: absolute;
   text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
   z-index: 2;
 }
 
-.top-left { top: 6px; left: 8px; }
+.top-left { left: 8px; top: 6px; }
 .bottom-right { bottom: 6px; right: 8px; transform: rotate(180deg); }
 
 /* Wild Card Colorful Background Circle */
 .wild-bg {
+  background: conic-gradient(#ef4444 0deg 90deg, #3b82f6 90deg 180deg, #eab308 180deg 270deg, #22c55e 270deg 360deg);
+  border-radius: 50%;
+  filter: blur(8px);
+  height: 80px;
+  opacity: 0.8;
   position: absolute;
   width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: conic-gradient(
-    #ef4444 0deg 90deg,
-    #3b82f6 90deg 180deg,
-    #eab308 180deg 270deg,
-    #22c55e 270deg 360deg
-  );
-  opacity: 0.8;
-  filter: blur(8px);
   z-index: 1;
 }
 
 /* Draw Pile Styling */
 .draw-pile .playing-card.card-back {
   background: #111827;
+  box-shadow: 1px 1px 0 #ef4444, 2px 2px 0 #111827, 3px 3px 0 #ef4444, 4px 4px 0 #111827, 5px 5px 0 #ef4444, 6px 6px 10px rgba(0,0,0,0.5);
   cursor: pointer;
-  box-shadow:
-    1px 1px 0 #ef4444,
-    2px 2px 0 #111827,
-    3px 3px 0 #ef4444,
-    4px 4px 0 #111827,
-    5px 5px 0 #ef4444,
-    6px 6px 10px rgba(0,0,0,0.5);
 }
 
 .draw-pile:hover .playing-card {
-  transform: scale(1.05) rotate(-2deg);
   box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  transform: scale(1.05) rotate(-2deg);
 }
 .draw-pile:active .playing-card { transform: scale(0.95); }
 
 .inner-logo {
   color: #ef4444;
-  font-weight: 900;
   font-size: 1.5rem;
+  font-weight: 900;
   transform: rotate(-5deg);
   z-index: 5;
 }
 
 .card-placeholder {
-  width: 100px;
-  height: 140px;
   border: 2px dashed rgba(255,255,255,0.2);
   border-radius: 12px;
+  height: 140px;
+  width: 100px;
+}
+
+/* Active color glow behind discard pile */
+.active-color-glow {
+  border: 2px solid transparent;
+  border-radius: 16px;
+  height: 150px;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: all 0.5s ease;
+  width: 110px;
+  z-index: 0;
 }
 
 /* --- OPPONENTS --- */
 .opponent-seat {
+  align-items: center;
+  display: flex;
+  height: 120px;
+  justify-content: center;
   position: absolute;
   width: 120px;
-  height: 120px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 .opponent-content {
+  align-items: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
   opacity: 0.6;
-  transition: all 0.3s;
   position: relative;
+  transition: all 0.3s;
 }
 
 .opponent-content.is-active {
@@ -391,101 +549,101 @@ const handleCardClick = (card: string) => {
 }
 
 .opponent-content.is-active .avatar-circle {
-  box-shadow: 0 0 15px #facc15, 0 0 30px rgba(250, 204, 21, 0.4);
   border-color: #facc15;
+  box-shadow: 0 0 15px #facc15, 0 0 30px rgba(250, 204, 21, 0.4);
 }
 
 .avatar-group {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  z-index: 5;
-  background: rgba(15, 23, 42, 0.8);
   padding: 5px;
-  border-radius: 12px;
+  z-index: 5;
 }
 
 .avatar-circle {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
+  align-items: center;
   background: #475569;
+  border: 3px solid #334155;
+  border-radius: 50%;
   color: white;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
   font-size: 1.2rem;
-  border: 3px solid #334155;
+  font-weight: bold;
+  height: 50px;
+  justify-content: center;
   margin-bottom: 5px;
+  width: 50px;
 }
 
 .op-name {
-  font-size: 0.85rem;
   color: white;
+  font-size: 0.85rem;
   font-weight: 600;
 }
 
 .mini-hand {
   display: flex;
+  height: 40px;
+  left: 60px;
   position: absolute;
   top: 10px;
-  left: 60px;
-  height: 40px;
 }
 
 .mini-card {
-  width: 20px;
-  height: 30px;
   background: #64748b;
   border: 1px solid #94a3b8;
   border-radius: 3px;
+  height: 30px;
   margin-left: -12px;
   transform-origin: bottom center;
+  width: 20px;
 }
 
 /* --- TURN BANNER --- */
 .turn-banner {
-  position: absolute;
-  bottom: 220px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 8px 24px;
-  border-radius: 20px;
-  background: rgba(0,0,0,0.5);
-  color: #94a3b8;
-  font-weight: bold;
-  font-size: 1rem;
   backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.5);
+  border-radius: 20px;
+  bottom: 220px;
+  color: #94a3b8;
+  font-size: 1rem;
+  font-weight: bold;
+  left: 50%;
+  padding: 8px 24px;
   pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
   transition: all 0.3s;
 }
 
 .turn-banner.my-turn {
   background: #22c55e;
-  color: white;
   box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+  color: white;
   transform: translateX(-50%) scale(1.1);
 }
 
 /* --- MY HAND --- */
 .my-hand-container {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 200px;
-  display: flex;
   align-items: flex-end;
-  justify-content: center;
   background: linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0) 100%);
+  bottom: 0;
+  display: flex;
+  height: 200px;
+  justify-content: center;
+  left: 0;
   padding-bottom: 20px;
+  position: absolute;
+  width: 100%;
 }
 
 .hand-scroll {
   display: flex;
-  padding: 0 40px;
   margin-left: 20px;
+  padding: 0 40px;
 }
 
 .hand-card {
@@ -496,25 +654,25 @@ const handleCardClick = (card: string) => {
 
 /* Only hover if PLAYABLE */
 .hand-card.playable:hover {
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  margin-right: 0px;
   transform: translateY(-40px) scale(1.1) rotate(2deg);
   z-index: 50;
-  margin-right: 0px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
 }
 
 .hand-card.playable { cursor: pointer; }
 
 /* Unplayable cards (Greyed out) */
 .hand-card.unplayable {
+  cursor: not-allowed;
   filter: grayscale(0.8) brightness(0.7);
   opacity: 0.8;
-  cursor: not-allowed;
   transform: scale(0.95);
 }
 
 @media (max-width: 600px) {
-  .table-surface { width: 90vw; height: 90vw; top: 40%; }
-  .playing-card { width: 80px; height: 120px; }
-  .card-placeholder { width: 80px; height: 120px; }
+  .card-placeholder { height: 120px; width: 80px; }
+  .playing-card { height: 120px; width: 80px; }
+  .table-surface { height: 90vw; top: 40%; width: 90vw; }
 }
 </style>
