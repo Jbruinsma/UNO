@@ -1,7 +1,7 @@
 import random
 from typing import Dict, List, Optional
 
-from backend.app.utils import create_deck
+from backend.app.utils import create_deck, SPECIAL_CARDS, WILD_CARDS
 
 
 class GameManager:
@@ -49,6 +49,13 @@ class GameManager:
             game["current_player_index"] = 0 if current_player_index == player_count - 1 else current_player_index + 1
         else:
             game["current_player_index"] = player_count - 1 if current_player_index == 0 else current_player_index - 1
+
+    def reverse_direction(self, game_id: str):
+        game = self.games.get(game_id)
+        if not game:
+            raise Exception("Game does not exist.")
+
+        game["direction"] *= -1
 
     def join_game(self, game_id: str, user_id: str, user_name: str):
         game = self.games.get(game_id)
@@ -122,7 +129,7 @@ class GameManager:
 
         return game
 
-    def process_turn(self, player_id: str, game_id: str, action: Optional[str]):
+    def process_turn(self, player_id: str, game_id: str, action: Optional[str], card: Optional[str] = None):
         game = self.games.get(game_id)
         if not game:
             raise Exception("Game does not exist.")
@@ -141,4 +148,44 @@ class GameManager:
             self.advance_turn(game_id)
             return game
 
+        elif action == "play_card":
+            current_player_id = players[game["current_player_index"]]
+            if current_player_id != player_id or card is None: return game
 
+            is_special_card = card in SPECIAL_CARDS
+            is_wild_card = card in WILD_CARDS
+
+            card_color = card[0]
+            card_value = card[-1]
+
+            top_card = game["discard_pile"][-1]
+            top_card_color = top_card[0]
+            top_card_value = top_card[-1]
+
+            # Validate card color or number to prevent frontend manipulation cheating
+            if is_wild_card or (is_special_card and top_card_color == card_color) or (not is_special_card and (top_card_value == card_value or top_card_color == card_color)):
+                game["discard_pile"].append(card)
+                game["player_cards"][current_player_id].remove(card)
+
+                if is_special_card:
+                    if card == 'S':
+                        # Special card: Skip
+                        print("Skipping turn...")
+                        for i in range(2): self.advance_turn(game_id)
+                    elif card == 'R':
+                        print("Reversing direction...")
+                        # Special card: Reverse
+                        self.reverse_direction(game_id)
+                    elif card == 'D2':
+                        # Special card: Draw 2
+                        pass
+                elif is_wild_card:
+                    if card == 'W-Wild':
+                        # Wild card: Pick a new color
+                        pass
+                    elif card == 'W-W4':
+                        # Wild card: Pick a new color and draw 4
+                        pass
+
+                self.advance_turn(game_id)
+            return game

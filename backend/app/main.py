@@ -125,8 +125,39 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                 elif action == "process_turn":
                     if current_game_id:
                         turn_action: Optional[str] = extra.get("action") if extra else None
-                        game_state = game_manager.process_turn(client_id, current_game_id, turn_action)
-                        await send_game_update(game_state, current_game_id, "game_update")
+                        card: Optional[str] = extra.get("card") if extra else None
+                        game_state = game_manager.process_turn(client_id, current_game_id, turn_action, card)
+
+                        # if turn_action == "draw_card_from_middle":
+                        #
+                        #     is_clockwise = game_state["direction"] == 1
+                        #
+                        #     current_player_index = game_state["current_player_index"]
+                        #     players = game_state["players"]
+                        #     player_count = len(players)
+                        #
+                        #     if is_clockwise:
+                        #         game_state["current_player_index"] = player_count - 1 if current_player_index == 0 else current_player_index - 1
+                        #     else:
+                        #         game_state["current_player_index"] = 0 if current_player_index == player_count - 1 else current_player_index + 1
+                        #
+                        #     await send_game_update(game_state, current_game_id)
+                        #
+                        #     newly_drawn_card = game_state["player_cards"][client_id][-1]
+                        #     newly_drawn_card_color = newly_drawn_card[0]
+                        #     newly_drawn_card_value = newly_drawn_card[-1]
+                        #
+                        #     top_card = game_state["discard_pile"][-1]
+                        #     top_card_color = top_card[0]
+                        #     top_card_value = top_card[-1]
+                        #
+                        #     is_special_card = newly_drawn_card = "D2" or newly_drawn_card == "W-Wild" or newly_drawn_card == "W-W4"
+                        #
+                        #     if newly_drawn_card_color == top_card_color or newly_drawn_card_value == top_card_value or is_special_card:
+                        #         pass
+
+                        await send_game_update(game_state, current_game_id)
+
                 else:
 
                     if current_game_id:

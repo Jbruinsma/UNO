@@ -157,10 +157,16 @@ export function useGameWebSocket() {
 
   // --- NEW: In-Game Actions ---
   const playCard = (card: string) => {
+
+    console.log("Playing card:", card);
+
     if (socket.value) {
         socket.value.send(JSON.stringify({
+          action: "process_turn",
+          extra: {
             action: "play_card",
-            card: card
+            card: card,
+          }
         }));
     }
   };

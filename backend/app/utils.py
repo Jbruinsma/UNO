@@ -1,10 +1,11 @@
 import random
 
+SPECIAL_CARDS = ['S', 'R', 'D2']
+WILD_CARDS = ['W-Wild', 'W-W4']
 
 def create_deck():
     deck = []
     colors = ['R', 'B', 'G', 'Y']
-    specials = ['S', 'R', 'D2']
 
     for color in colors:
         deck.append(f"{color}-0")
@@ -13,7 +14,7 @@ def create_deck():
             deck.append(f"{color}-{i}")
             deck.append(f"{color}-{i}")
 
-        for sp in specials:
+        for sp in SPECIAL_CARDS:
             deck.append(f"{color}-{sp}")
             deck.append(f"{color}-{sp}")
 
