@@ -34,6 +34,22 @@ class GameManager:
         }
         return self.games[game_id]
 
+    def advance_turn(self, game_id: str):
+        game = self.games.get(game_id)
+        if not game:
+            raise Exception("Game does not exist.")
+
+        is_clockwise = game["direction"] == 1
+
+        current_player_index = game["current_player_index"]
+        players = game["players"]
+        player_count = len(players)
+
+        if is_clockwise:
+            game["current_player_index"] = 0 if current_player_index == player_count - 1 else current_player_index + 1
+        else:
+            game["current_player_index"] = player_count - 1 if current_player_index == 0 else current_player_index - 1
+
     def join_game(self, game_id: str, user_id: str, user_name: str):
         game = self.games.get(game_id)
         if not game:
@@ -105,3 +121,24 @@ class GameManager:
         game["current_player_index"] = start_index
 
         return game
+
+    def process_turn(self, player_id: str, game_id: str, action: Optional[str]):
+        game = self.games.get(game_id)
+        if not game:
+            raise Exception("Game does not exist.")
+
+        players = game["players"]
+
+        if not action: return game
+
+        if action == "draw_card_from_middle":
+            current_player_id = players[game["current_player_index"]]
+            if current_player_id != player_id: return game
+
+            selected_card = game["deck"].pop()
+            game["player_cards"][current_player_id].append(selected_card)
+
+            self.advance_turn(game_id)
+            return game
+
+

@@ -1,6 +1,8 @@
 import json
 import random
 import string
+from typing import Optional
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from .connection_manager import ConnectionManager
 from .game_manager import GameManager
@@ -56,6 +58,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
             try:
                 payload = json.loads(data)
                 action = payload.get("action")
+                extra = payload.get("extra")
 
                 if action == "create_game":
                     new_game_id = generate_game_id()
@@ -117,31 +120,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
 
                     if current_game_id:
                         game_state = game_manager.start_game(current_game_id)
-                        players = game_state["players"]
-                        player_cards = game_state["player_cards"]
+                        await send_game_update(game_state, current_game_id, "game_started")
 
-                        start_index = game_state["current_player_index"]
-                        first_player_id = players[start_index]
-
-                        for player_id in players:
-                            msg = {
-                                "event": "game_started",
-                                "game_id": current_game_id,
-                                "top_card": game_state["discard_pile"][-1],
-                                "current_player": first_player_id,
-                                "hand": player_cards[player_id],
-                                "card_counts": {
-                                    other_player_id: len(player_cards[other_player_id])
-                                    for other_player_id in players
-                                    if other_player_id != player_id
-                                }
-                            }
-
-                            await connection_manager.send_personal_message(
-                                json.dumps(msg),
-                                player_id
-                            )
-
+                elif action == "process_turn":
+                    if current_game_id:
+                        turn_action: Optional[str] = extra.get("action") if extra else None
+                        game_state = game_manager.process_turn(client_id, current_game_id, turn_action)
+                        await send_game_update(game_state, current_game_id, "game_update")
                 else:
 
                     if current_game_id:
@@ -171,3 +156,30 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                 "player_name": client_display_name,
                 "message": f"{client_display_name} disconnected unexpectedly."
             })
+
+
+async def send_game_update(game_state: dict, current_game_id: str, event: str = "game_update"):
+    players = game_state["players"]
+    player_cards = game_state["player_cards"]
+
+    current_player_index = game_state["current_player_index"]
+    current_player_id = players[current_player_index]
+
+    for player_id in players:
+        msg = {
+            "event": event,
+            "game_id": current_game_id,
+            "top_card": game_state["discard_pile"][-1],
+            "current_player": current_player_id,
+            "hand": player_cards[player_id],
+            "card_counts": {
+                other_player_id: len(player_cards[other_player_id])
+                for other_player_id in players
+                if other_player_id != player_id
+            }
+        }
+
+        await connection_manager.send_personal_message(
+            json.dumps(msg),
+            player_id
+        )

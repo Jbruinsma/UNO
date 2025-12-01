@@ -104,7 +104,9 @@ export function useGameWebSocket() {
       // --- NEW: Game Logic Handling ---
       case "game_started":
         gameState.value = "PLAYING";
+
       case "game_update":
+        console.log("Game Update:", data);
         if (data.top_card) topCard.value = data.top_card;
         if (data.current_player) currentPlayerId.value = data.current_player;
         if (data.hand) myHand.value = data.hand;
@@ -164,11 +166,10 @@ export function useGameWebSocket() {
   };
 
   const drawCard = () => {
-    if (socket.value) { socket.value.send(JSON.stringify({action: "draw_card"})); }
-
     try {
       lockDrawableCardPile.value = true;
       console.log("Drawing card...");
+      if (socket.value) { socket.value.send(JSON.stringify({action: "process_turn", extra: {action: "draw_card_from_middle"}})); }
     } catch (e) {
       console.log("Error drawing card:", e);
     } finally {
