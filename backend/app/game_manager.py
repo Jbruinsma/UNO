@@ -1,6 +1,8 @@
 import random
 from typing import Dict, List, Optional
 
+from pygments.lexers import q
+
 from backend.app.utils import create_deck, SPECIAL_CARDS, WILD_CARDS, advance_turn_counter, retrieve_card_info, \
     REGULAR_CARDS
 
@@ -54,6 +56,24 @@ class GameManager:
             raise Exception("Game does not exist.")
 
         game["direction"] *= -1
+
+    def use_wild_card(self, color: Optional[str], game_id: str):
+        game = self.games.get(game_id)
+        if not game:
+            raise Exception("Game does not exist.")
+
+        if color is None:
+            self.advance_turn(game_id)
+            return game
+
+        new_color, _ = retrieve_card_info(color)
+        if new_color not in REGULAR_CARDS:
+            self.advance_turn(game_id)
+            return game
+
+        game["current_active_color"] = new_color
+        self.advance_turn(game_id)
+        return game
 
     def set_event(self, game_id: str, event_type: str, player_id: Optional[str], affected_player_id: Optional[str] = None):
         game = self.games.get(game_id)
@@ -136,7 +156,7 @@ class GameManager:
 
         return game
 
-    def process_turn(self, player_id: str, game_id: str, action: Optional[str], card: Optional[str] = None, ):
+    def process_turn(self, player_id: str, game_id: str, action: Optional[str], card: Optional[str] = None, advance_turn: bool = True):
         game = self.games.get(game_id)
         if not game:
             raise Exception("Game does not exist.")
@@ -154,7 +174,7 @@ class GameManager:
             selected_card = game["deck"].pop()
             game["player_cards"][current_player_id].append(selected_card)
 
-            self.advance_turn(game_id)
+            if advance_turn: self.advance_turn(game_id)
             return game
 
 
@@ -215,20 +235,12 @@ class GameManager:
             return game
 
         elif action == "change_color_with_wild":
-            if card is None:
-                self.advance_turn(game_id)
-                return game
-
-            new_color, _ = retrieve_card_info(card)
-            if new_color not in REGULAR_CARDS:
-                self.advance_turn(game_id)
-                return game
-
-            game["current_active_color"] = new_color
-            self.advance_turn(game_id)
-            return game
+            return self.use_wild_card(card, game_id)
 
         elif action == "change_color_with_wild_and_draw4":
-            pass
+            player_id = players[game["current_player_index"]]
+            self.use_wild_card(card, game_id)
+            self.set_event(game_id, "draw4", player_id, players[game["current_player_index"]])
+            return game
 
         return game

@@ -7,7 +7,7 @@ const {
   playerNames,
   playerId,
   myHand,
-  currentActiveColor, // <--- Key Variable
+  currentActiveColor,
   topCard,
   currentPlayerId,
   isMyTurn,
@@ -24,6 +24,14 @@ const {
 const showReverseAnimation = ref(false);
 const showColorPicker = ref(false);
 const wildCardIsDraw4 = ref<boolean>(false);
+
+// Animation State
+interface FlyingCard {
+  id: number;
+  style: any;
+}
+const flyingCards = ref<FlyingCard[]>([]);
+let nextFlyingId = 0;
 
 // Filter opponents (Everyone except me)
 const opponents = computed(() => players.value.filter(p => p !== playerId.value));
@@ -71,7 +79,6 @@ const getCardMeta = (cardCode: string) => {
   let label = val;
   let isWild = false;
 
-  // Map special codes to display symbols
   if (val === 'S') label = '⊘';      // Skip
   else if (val === 'R') label = '⇄'; // Reverse
   else if (val === 'D2') label = '+2'; // Draw 2
@@ -86,15 +93,13 @@ const getCardMeta = (cardCode: string) => {
   };
 };
 
-// --- Active Color Helper ---
-// Maps the single char code 'R' to css hex for UI highlights
 const getActiveColorHex = computed(() => {
   switch (currentActiveColor.value) {
     case 'R': return '#ef4444';
     case 'B': return '#3b82f6';
     case 'G': return '#22c55e';
     case 'Y': return '#eab308';
-    default: return 'transparent'; // No glow if no active color or neutral
+    default: return 'transparent';
   }
 });
 
@@ -105,24 +110,17 @@ const isCardPlayable = (card: string) => {
   const [cColor, cValue] = card.split('-');
   const [tColor, tValue] = topCard.value.split('-');
 
-  // 1. Wild cards are always playable (W-Wild, W-W4)
   if (cColor === 'W') return true;
 
-  // 2. Match Active Color (Backend Logic)
-  // If we have a forced active color (from a previous Wild), match that.
-  // Otherwise, match the top card's color.
   const targetColor = currentActiveColor.value || tColor;
   if (cColor === targetColor) return true;
 
-  // 3. Match Value (e.g. 5==5, S==S, R==R)
-  // Value matching always works regardless of color
   if (cValue === tValue) return true;
 
   return false;
 };
 
 const handleCardClick = (card: string) => {
-  // Only allow click if it is my turn AND the card is playable
   if (isMyTurn.value && isCardPlayable(card)) {
     playCard(card);
   }
@@ -135,30 +133,87 @@ const handleColorSelect = (color: string) => {
   wildCardIsDraw4.value = false;
 };
 
+// --- ANIMATION CONTROLLER ---
+const triggerDrawAnimation = (count: number) => {
+  // We stagger the animation AND the logic (drawCard call)
+  // so the cards arrive one by one visually and logically.
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+
+      // 1. Logic: Tell backend to draw
+      // (Using any args if your specific backend requires them, otherwise standard)
+      drawCard();
+
+      // 2. Visual: Spawn a flying card
+      const id = nextFlyingId++;
+
+      // Start position (Draw Pile / Center)
+      const startStyle = {
+        top: '45%',
+        left: '50%',
+        opacity: 1,
+        transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)',
+        transition: 'none' // Instant placement
+      };
+
+      flyingCards.value.push({ id, style: startStyle });
+
+      // Trigger animation to End Position (My Hand / Bottom)
+      // Double requestAnimationFrame ensures the browser renders the start state first
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const card = flyingCards.value.find(c => c.id === id);
+          if (card) {
+            card.style = {
+              top: '90%', // Target: Bottom of screen
+              left: '50%',
+              opacity: 0, // Fade out as it hits hand
+              transform: `translate(-50%, -50%) scale(1) rotate(${Math.random() * 20 - 10}deg)`,
+              transition: 'all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)'
+            };
+          }
+        });
+      });
+
+      // Cleanup DOM element after animation
+      setTimeout(() => {
+        flyingCards.value = flyingCards.value.filter(c => c.id !== id);
+      }, 700);
+
+    }, i * 250); // 250ms delay between each card
+  }
+};
+
 watch(event, (newEvent) => {
   console.log("NEW EVENT: ", newEvent);
 
   const eventType = newEvent.type;
   const originPlayerId = newEvent.player_id;
+  const affectedPlayerId = newEvent.affected_player_id;
 
   if (eventType === 'reverse') {
     showReverseAnimation.value = true;
-    setTimeout(() => {
-      showReverseAnimation.value = false;
-    }, 2000);
+    setTimeout(() => { showReverseAnimation.value = false; }, 2000);
 
-  } else if (eventType === 'skip'){
-    // Handle skip if needed
   } else if (eventType === 'wild_color_pick') {
-    // Check if I am the one who needs to pick (origin matches my ID)
-    if (playerId.value === originPlayerId) {
-      showColorPicker.value = true;
-    }
+    if (playerId.value === originPlayerId) { showColorPicker.value = true; }
+
   } else if (eventType === 'wild_color_pick_draw4') {
-    // Often handled same as normal wild color pick
     if (playerId.value === originPlayerId) {
       showColorPicker.value = true;
       wildCardIsDraw4.value = true;
+    }
+
+  } else if (eventType === 'draw4') {
+    // If I am the victim, trigger the sequence
+    if (affectedPlayerId === playerId.value) {
+      triggerDrawAnimation(4);
+    }
+
+  } else if (eventType === 'draw2') {
+    // If I am the victim, trigger the sequence
+    if (affectedPlayerId === playerId.value) {
+      triggerDrawAnimation(2);
     }
   }
 });
@@ -170,6 +225,19 @@ watch(event, (newEvent) => {
     <div v-if="showReverseAnimation" class="reverse-overlay">
       <div class="reverse-icon">⇄</div>
       <div class="reverse-text">REVERSED!</div>
+    </div>
+
+    <div class="flying-card-layer">
+      <div
+        v-for="card in flyingCards"
+        :key="card.id"
+        class="flying-card-visual"
+        :style="card.style"
+      >
+        <div class="playing-card card-back">
+          <span class="inner-logo">UNO</span>
+        </div>
+      </div>
     </div>
 
     <div v-if="showColorPicker" class="picker-backdrop">
@@ -236,10 +304,8 @@ watch(event, (newEvent) => {
             :style="{ backgroundColor: getCardMeta(topCard).bg }"
           >
             <div v-if="getCardMeta(topCard).isWild" class="wild-bg"></div>
-
             <span class="corner-label top-left">{{ getCardMeta(topCard).label }}</span>
             <span class="corner-label bottom-right">{{ getCardMeta(topCard).label }}</span>
-
             <span class="card-value">{{ getCardMeta(topCard).label }}</span>
           </div>
           <div v-else class="card-placeholder"></div>
@@ -254,14 +320,12 @@ watch(event, (newEvent) => {
         :style="getOpponentStyle(index, opponents.length)"
       >
         <div class="opponent-content" :class="{ 'is-active': opId === currentPlayerId }">
-
           <div class="avatar-group">
             <div class="avatar-circle">
               {{ playerNames[opId]?.charAt(0).toUpperCase() }}
             </div>
             <span class="op-name">{{ playerNames[opId] }}</span>
           </div>
-
           <div class="mini-hand">
             <div
               v-for="n in (otherPlayerCardCounts[opId] || 0)"
@@ -270,7 +334,6 @@ watch(event, (newEvent) => {
               :style="{ transform: `rotate(${(n-1) * 5}deg)` }"
             ></div>
           </div>
-
         </div>
       </div>
 
@@ -294,10 +357,8 @@ watch(event, (newEvent) => {
           @click="handleCardClick(card)"
         >
           <div v-if="getCardMeta(card).isWild" class="wild-bg"></div>
-
           <span class="corner-label top-left">{{ getCardMeta(card).label }}</span>
           <span class="corner-label bottom-right">{{ getCardMeta(card).label }}</span>
-
           <span class="card-value">{{ getCardMeta(card).label }}</span>
         </div>
       </div>
@@ -405,6 +466,22 @@ watch(event, (newEvent) => {
 .picker-title { color: white; font-size: 1.2rem; font-weight: 800; letter-spacing: 2px; margin: 0; text-transform: uppercase; }
 .red { background-color: #ef4444; color: #ef4444; }
 .yellow { background-color: #eab308; color: #eab308; }
+
+/* --- FLYING CARDS --- */
+.flying-card-layer {
+  height: 100vh;
+  left: 0;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  width: 100vw;
+  z-index: 500;
+}
+.flying-card-visual {
+  height: 140px;
+  position: absolute;
+  width: 100px;
+}
 
 /* --- DIRECTION RING --- */
 .direction-ring {

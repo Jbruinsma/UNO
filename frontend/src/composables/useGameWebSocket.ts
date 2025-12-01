@@ -180,11 +180,11 @@ export function useGameWebSocket() {
     }
   };
 
-  const drawCard = () => {
+  const drawCard = (advanceTurn: boolean = true) => {
     try {
       lockDrawableCardPile.value = true;
       console.log("Drawing card...");
-      if (socket.value) { socket.value.send(JSON.stringify({action: "process_turn", extra: {action: "draw_card_from_middle"}})); }
+      if (socket.value) { socket.value.send(JSON.stringify({action: "process_turn", extra: {action: "draw_card_from_middle", advance_turn: advanceTurn}})); }
     } catch (e) {
       console.log("Error drawing card:", e);
     } finally {
