@@ -186,7 +186,7 @@ class GameManager:
             _, top_card_value = retrieve_card_info(top_card)
 
             active_color = game.get("current_active_color")
-            is_special_card = card_value in SPECIAL_CARDS
+            is_special_card = card_value in SPECIAL_CARDS or card[2:] in SPECIAL_CARDS
             is_wild_card = card in WILD_CARDS
             # Validation Logic:
             #  - Wilds are always playable
@@ -201,6 +201,8 @@ class GameManager:
 
                 if is_special_card:
 
+                    print("CARD: ", card)
+
                     if card_value == 'S':
                         self.advance_turn(game_id)
                         self.set_event(game_id, "skip", None, game["players"][game["current_player_index"]])
@@ -209,13 +211,13 @@ class GameManager:
                         self.reverse_direction(game_id)
                         self.set_event(game_id, "reverse", None)
 
-                    elif card_value == 'D2':
+                    elif card[2:] == 'D2':
+                        print("playing draw2 card")
                         next_p_index = advance_turn_counter(
                             game["current_player_index"],
                             len(players),
                             game["direction"]
                         )
-
                         victim_id = game["players"][next_p_index]
                         self.set_event(game_id, "draw2", current_player_id, victim_id)
                         self.advance_turn(game_id)

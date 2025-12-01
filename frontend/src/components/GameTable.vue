@@ -115,9 +115,8 @@ const isCardPlayable = (card: string) => {
   const targetColor = currentActiveColor.value || tColor;
   if (cColor === targetColor) return true;
 
-  if (cValue === tValue) return true;
+  return cValue === tValue;
 
-  return false;
 };
 
 const handleCardClick = (card: string) => {
@@ -142,18 +141,18 @@ const triggerDrawAnimation = (count: number) => {
 
       // 1. Logic: Tell backend to draw
       // (Using any args if your specific backend requires them, otherwise standard)
-      drawCard();
+      const advanceTurnWithMove: boolean = i === count - 1;
+      drawCard(advanceTurnWithMove);
 
       // 2. Visual: Spawn a flying card
       const id = nextFlyingId++;
 
-      // Start position (Draw Pile / Center)
       const startStyle = {
         top: '45%',
         left: '50%',
         opacity: 1,
         transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)',
-        transition: 'none' // Instant placement
+        transition: 'none'
       };
 
       flyingCards.value.push({ id, style: startStyle });
@@ -212,6 +211,7 @@ watch(event, (newEvent) => {
 
   } else if (eventType === 'draw2') {
     // If I am the victim, trigger the sequence
+    console.log("DRAW 2", newEvent)
     if (affectedPlayerId === playerId.value) {
       triggerDrawAnimation(2);
     }
