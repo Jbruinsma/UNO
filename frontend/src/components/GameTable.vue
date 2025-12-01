@@ -3,6 +3,8 @@ import { computed, watch, ref } from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket';
 
 const {
+  gameState,
+  leaveGame,
   players,
   playerNames,
   playerId,
@@ -17,13 +19,19 @@ const {
   changeColorWithWildAndDraw4,
   direction,
   otherPlayerCardCounts,
-  event
+  event,
+  endGame
 } = useGameWebSocket();
 
 // --- Local State ---
 const showReverseAnimation = ref(false);
 const showColorPicker = ref(false);
 const wildCardIsDraw4 = ref<boolean>(false);
+
+// --- Win/Game Over State ---
+const showWinnerAnimation = ref(false);
+const showGameOverModal = ref(false);
+const winnerName = ref('');
 
 // Animation State
 interface FlyingCard {
@@ -116,7 +124,6 @@ const isCardPlayable = (card: string) => {
   if (cColor === targetColor) return true;
 
   return cValue === tValue;
-
 };
 
 const handleCardClick = (card: string) => {
@@ -132,21 +139,23 @@ const handleColorSelect = (color: string) => {
   wildCardIsDraw4.value = false;
 };
 
+// --- Navigation Handlers ---
+const handleBackToLobby = () => {
+  gameState.value = 'LOBBY';
+};
+
+const handleLeave = () => {
+  leaveGame();
+};
+
 // --- ANIMATION CONTROLLER ---
 const triggerDrawAnimation = (count: number) => {
-  // We stagger the animation AND the logic (drawCard call)
-  // so the cards arrive one by one visually and logically.
   for (let i = 0; i < count; i++) {
     setTimeout(() => {
-
-      // 1. Logic: Tell backend to draw
-      // (Using any args if your specific backend requires them, otherwise standard)
       const advanceTurnWithMove: boolean = i === count - 1;
       drawCard(advanceTurnWithMove);
 
-      // 2. Visual: Spawn a flying card
       const id = nextFlyingId++;
-
       const startStyle = {
         top: '45%',
         left: '50%',
@@ -157,16 +166,14 @@ const triggerDrawAnimation = (count: number) => {
 
       flyingCards.value.push({ id, style: startStyle });
 
-      // Trigger animation to End Position (My Hand / Bottom)
-      // Double requestAnimationFrame ensures the browser renders the start state first
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const card = flyingCards.value.find(c => c.id === id);
           if (card) {
             card.style = {
-              top: '90%', // Target: Bottom of screen
+              top: '90%',
               left: '50%',
-              opacity: 0, // Fade out as it hits hand
+              opacity: 0,
               transform: `translate(-50%, -50%) scale(1) rotate(${Math.random() * 20 - 10}deg)`,
               transition: 'all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)'
             };
@@ -174,12 +181,11 @@ const triggerDrawAnimation = (count: number) => {
         });
       });
 
-      // Cleanup DOM element after animation
       setTimeout(() => {
         flyingCards.value = flyingCards.value.filter(c => c.id !== id);
       }, 700);
 
-    }, i * 250); // 250ms delay between each card
+    }, i * 250);
   }
 };
 
@@ -204,23 +210,52 @@ watch(event, (newEvent) => {
     }
 
   } else if (eventType === 'draw4') {
-    // If I am the victim, trigger the sequence
-    if (affectedPlayerId === playerId.value) {
-      triggerDrawAnimation(4);
-    }
+    if (affectedPlayerId === playerId.value) { triggerDrawAnimation(4); }
 
   } else if (eventType === 'draw2') {
-    // If I am the victim, trigger the sequence
-    console.log("DRAW 2", newEvent)
-    if (affectedPlayerId === playerId.value) {
-      triggerDrawAnimation(2);
-    }
+    if (affectedPlayerId === playerId.value) { triggerDrawAnimation(2); }
+
+  } else if (eventType === 'win') {
+
+    console.log("WIN DETECTED")
+
+    // Identify Winner
+    winnerName.value = playerNames.value[originPlayerId] || 'Player';
+
+    // 1. Show Winner Animation
+    showWinnerAnimation.value = true;
+
+    // 2. Cleanup Backend Connection
+    endGame();
+
+    // 3. Transition to Modal after 3 seconds
+    setTimeout(() => {
+      showWinnerAnimation.value = false;
+      showGameOverModal.value = true;
+    }, 3000);
   }
 });
 </script>
 
 <template>
   <div class="game-container">
+
+    <div v-if="showWinnerAnimation" class="winner-overlay">
+      <div class="crown-icon">👑</div>
+      <div class="winner-text">{{ winnerName }} WINS!</div>
+    </div>
+
+    <div v-if="showGameOverModal" class="modal-backdrop">
+      <div class="modal-content">
+        <div class="modal-crown">👑</div>
+        <h2 class="modal-title">GAME OVER</h2>
+        <p class="modal-subtitle">{{ winnerName }} takes the victory!</p>
+        <div class="modal-actions">
+          <button class="action-btn primary" @click="handleBackToLobby">Back to Lobby</button>
+          <button class="action-btn secondary" @click="handleLeave">Leave Game</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="showReverseAnimation" class="reverse-overlay">
       <div class="reverse-icon">⇄</div>
@@ -368,384 +403,78 @@ watch(event, (newEvent) => {
 </template>
 
 <style scoped>
-.game-container {
-  background: #0f172a;
-  display: flex;
-  flex-direction: column;
-  font-family: 'Segoe UI', sans-serif;
-  height: 100vh;
-  overflow: hidden;
-  position: relative;
-  width: 100vw;
-}
-
-/* --- THE TABLE --- */
-.table-surface {
-  align-items: center;
-  background: radial-gradient(circle, #334155 0%, #1e293b 70%);
-  border-radius: 50%;
-  box-shadow: 0 0 50px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.2);
-  display: flex;
-  height: 70vh;
-  justify-content: center;
-  left: 50%;
-  position: absolute;
-  top: 45%;
-  transform: translate(-50%, -50%);
-  width: 70vh;
-}
-
-/* --- REVERSE ANIMATION --- */
-.reverse-icon { font-size: 6rem; line-height: 1; }
-.reverse-overlay {
-  align-items: center;
-  animation: pop-spin 2s ease-in-out forwards;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  border-radius: 30px;
-  color: #facc15;
-  display: flex;
-  flex-direction: column;
-  height: 250px;
-  justify-content: center;
-  left: 50%;
-  pointer-events: none;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 300px;
-  z-index: 200;
-}
-.reverse-text { font-size: 2rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
-
-@keyframes pop-spin {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(-90deg); }
-  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(0deg); }
-  80% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(90deg); }
-}
-
-/* --- COLOR PICKER ANIMATION --- */
+.action-btn { border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: bold; padding: 12px 24px; transition: transform 0.1s; width: 100%; }
+.action-btn:active { transform: scale(0.95); }
+.action-btn.primary { background: #22c55e; color: white; margin-bottom: 10px; }
+.action-btn.secondary { background: #475569; color: white; }
+.active-color-glow { border: 2px solid transparent; border-radius: 16px; height: 150px; left: 50%; pointer-events: none; position: absolute; top: 50%; transform: translate(-50%, -50%); transition: all 0.5s ease; width: 110px; z-index: 0; }
+.arrow-svg { fill: none; height: 100%; stroke: white; stroke-width: 2; width: 100%; }
+.avatar-circle { align-items: center; background: #475569; border: 3px solid #334155; border-radius: 50%; color: white; display: flex; font-size: 1.2rem; font-weight: bold; height: 50px; justify-content: center; margin-bottom: 5px; width: 50px; }
+.avatar-group { align-items: center; background: rgba(15, 23, 42, 0.8); border-radius: 12px; display: flex; flex-direction: column; padding: 5px; z-index: 5; }
 .blue { background-color: #3b82f6; color: #3b82f6; }
-.color-btn {
-  border: none;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-  cursor: pointer;
-  height: 80px;
-  transition: transform 0.1s, filter 0.1s;
-  width: 80px;
-}
+.bottom-right { bottom: 6px; right: 8px; transform: rotate(180deg); }
+.card-pile { position: relative; }
+.card-placeholder { border: 2px dashed rgba(255,255,255,0.2); border-radius: 12px; height: 140px; width: 100px; }
+.card-value { color: white; font-size: 3rem; font-weight: 800; text-shadow: 2px 2px 0px rgba(0,0,0,0.2); z-index: 2; }
+.center-area { display: flex; gap: 30px; z-index: 10; }
+.color-btn { border: none; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); cursor: pointer; height: 80px; transition: transform 0.1s, filter 0.1s; width: 80px; }
 .color-btn:active { transform: scale(0.95); }
 .color-btn:hover { filter: brightness(1.2); transform: scale(1.05); }
 .color-grid { display: grid; gap: 15px; grid-template-columns: 1fr 1fr; margin-top: 25px; }
+.corner-label { color: white; font-size: 0.9rem; font-weight: 800; position: absolute; text-shadow: 1px 1px 0 rgba(0,0,0,0.3); z-index: 2; }
+.crown-icon { animation: bounce 1s infinite; font-size: 8rem; margin-bottom: 20px; }
+.direction-ring { animation: rotate-cw 20s linear infinite; height: 100%; opacity: 0.15; pointer-events: none; position: absolute; width: 100%; }
+.direction-ring.counter-clockwise { animation: rotate-ccw 20s linear infinite; }
+.draw-pile .playing-card.card-back { background: #111827; box-shadow: 1px 1px 0 #ef4444, 2px 2px 0 #111827, 3px 3px 0 #ef4444, 4px 4px 0 #111827, 5px 5px 0 #ef4444, 6px 6px 10px rgba(0,0,0,0.5); cursor: pointer; }
+.draw-pile:active .playing-card { transform: scale(0.95); }
+.draw-pile:hover .playing-card { box-shadow: 0 10px 25px rgba(0,0,0,0.5); transform: scale(1.05) rotate(-2deg); }
+.flying-card-layer { height: 100vh; left: 0; pointer-events: none; position: fixed; top: 0; width: 100vw; z-index: 500; }
+.flying-card-visual { height: 140px; position: absolute; width: 100px; }
+.game-container { background: #0f172a; display: flex; flex-direction: column; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; position: relative; width: 100vw; }
 .green { background-color: #22c55e; color: #22c55e; }
-.picker-backdrop {
-  align-items: center;
-  backdrop-filter: blur(5px);
-  background: rgba(0, 0, 0, 0.6);
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  left: 0;
-  position: fixed;
-  right: 0;
-  top: 0;
-  z-index: 300;
-}
-.picker-modal {
-  align-items: center;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 20px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-  display: flex;
-  flex-direction: column;
-  padding: 30px 50px;
-}
+.hand-card { margin-right: -50px; }
+.hand-card.playable { cursor: pointer; }
+.hand-card.playable:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-right: 0px; transform: translateY(-40px) scale(1.1) rotate(2deg); z-index: 50; }
+.hand-card.unplayable { cursor: not-allowed; filter: grayscale(0.8) brightness(0.7); opacity: 0.8; transform: scale(0.95); }
+.hand-card:last-child { margin-right: 0; }
+.hand-scroll { display: flex; margin-left: 20px; padding: 0 40px; }
+.inner-logo { color: #ef4444; font-size: 1.5rem; font-weight: 900; transform: rotate(-5deg); z-index: 5; }
+.mini-card { background: #64748b; border: 1px solid #94a3b8; border-radius: 3px; height: 30px; margin-left: -12px; transform-origin: bottom center; width: 20px; }
+.mini-hand { display: flex; height: 40px; left: 60px; position: absolute; top: 10px; }
+.modal-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 30px; width: 100%; }
+.modal-backdrop { align-items: center; background: rgba(0,0,0,0.8); bottom: 0; display: flex; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 1000; }
+.modal-content { align-items: center; background: #1e293b; border: 2px solid #facc15; border-radius: 20px; box-shadow: 0 0 50px rgba(250, 204, 21, 0.2); display: flex; flex-direction: column; max-width: 400px; padding: 40px; text-align: center; width: 90%; }
+.modal-crown { font-size: 3rem; margin-bottom: 10px; }
+.modal-subtitle { color: #94a3b8; font-size: 1.2rem; margin: 0; }
+.modal-title { color: #facc15; font-size: 2.5rem; font-weight: 900; letter-spacing: 2px; margin: 0 0 10px 0; text-transform: uppercase; }
+.my-hand-container { align-items: flex-end; background: linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0) 100%); bottom: 0; display: flex; height: 200px; justify-content: center; left: 0; padding-bottom: 20px; position: absolute; width: 100%; }
+.op-name { color: white; font-size: 0.85rem; font-weight: 600; }
+.opponent-content { align-items: center; display: flex; flex-direction: column; opacity: 0.6; position: relative; transition: all 0.3s; }
+.opponent-content.is-active { opacity: 1; transform: scale(1.15); }
+.opponent-content.is-active .avatar-circle { border-color: #facc15; box-shadow: 0 0 15px #facc15, 0 0 30px rgba(250, 204, 21, 0.4); }
+.opponent-seat { align-items: center; display: flex; height: 120px; justify-content: center; position: absolute; width: 120px; }
+.picker-backdrop { align-items: center; backdrop-filter: blur(5px); background: rgba(0, 0, 0, 0.6); bottom: 0; display: flex; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 300; }
+.picker-modal { align-items: center; background: #1e293b; border: 1px solid #334155; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; padding: 30px 50px; }
 .picker-title { color: white; font-size: 1.2rem; font-weight: 800; letter-spacing: 2px; margin: 0; text-transform: uppercase; }
+.playing-card { align-items: center; background: white; border: 4px solid white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; height: 140px; justify-content: center; overflow: hidden; position: relative; transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); user-select: none; width: 100px; z-index: 1; }
 .red { background-color: #ef4444; color: #ef4444; }
+.reverse-icon { font-size: 6rem; line-height: 1; }
+.reverse-overlay { align-items: center; animation: pop-spin 2s ease-in-out forwards; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); border-radius: 30px; color: #facc15; display: flex; flex-direction: column; height: 250px; justify-content: center; left: 50%; pointer-events: none; position: absolute; top: 50%; transform: translate(-50%, -50%); width: 300px; z-index: 200; }
+.reverse-text { font-size: 2rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+.table-surface { align-items: center; background: radial-gradient(circle, #334155 0%, #1e293b 70%); border-radius: 50%; box-shadow: 0 0 50px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.2); display: flex; height: 70vh; justify-content: center; left: 50%; position: absolute; top: 45%; transform: translate(-50%, -50%); width: 70vh; }
+.top-left { left: 8px; top: 6px; }
+.turn-banner { backdrop-filter: blur(4px); background: rgba(0,0,0,0.5); border-radius: 20px; bottom: 220px; color: #94a3b8; font-size: 1rem; font-weight: bold; left: 50%; padding: 8px 24px; pointer-events: none; position: absolute; transform: translateX(-50%); transition: all 0.3s; }
+.turn-banner.my-turn { background: #22c55e; box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); color: white; transform: translateX(-50%) scale(1.1); }
+.wild-bg { background: conic-gradient(#ef4444 0deg 90deg, #3b82f6 90deg 180deg, #eab308 180deg 270deg, #22c55e 270deg 360deg); border-radius: 50%; filter: blur(8px); height: 80px; opacity: 0.8; position: absolute; width: 80px; z-index: 1; }
+.winner-overlay { align-items: center; animation: zoom-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); background: rgba(0,0,0,0.8); bottom: 0; color: #facc15; display: flex; flex-direction: column; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 1000; }
+.winner-text { font-size: 4rem; font-weight: 900; letter-spacing: 4px; text-shadow: 0 0 20px rgba(250, 204, 21, 0.5); text-transform: uppercase; }
 .yellow { background-color: #eab308; color: #eab308; }
 
-/* --- FLYING CARDS --- */
-.flying-card-layer {
-  height: 100vh;
-  left: 0;
-  pointer-events: none;
-  position: fixed;
-  top: 0;
-  width: 100vw;
-  z-index: 500;
-}
-.flying-card-visual {
-  height: 140px;
-  position: absolute;
-  width: 100px;
-}
-
-/* --- DIRECTION RING --- */
-.direction-ring {
-  animation: rotate-cw 20s linear infinite;
-  height: 100%;
-  opacity: 0.15;
-  pointer-events: none;
-  position: absolute;
-  width: 100%;
-}
-.direction-ring.counter-clockwise { animation: rotate-ccw 20s linear infinite; }
-.arrow-svg { fill: none; height: 100%; stroke: white; stroke-width: 2; width: 100%; }
-
-@keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+@keyframes pop-spin { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(-90deg); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(0deg); } 80% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(90deg); } }
 @keyframes rotate-ccw { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-
-/* --- CENTER PILES --- */
-.center-area {
-  display: flex;
-  gap: 30px;
-  z-index: 10;
-}
-
-.card-pile { position: relative; }
-
-/* Shared Card Style */
-.playing-card {
-  align-items: center;
-  background: white;
-  border: 4px solid white;
-  border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-  display: flex;
-  height: 140px;
-  justify-content: center;
-  overflow: hidden;
-  position: relative;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  user-select: none;
-  width: 100px;
-  z-index: 1;
-}
-
-/* --- NEW CARD FACE STYLES --- */
-.card-value {
-  color: white;
-  font-size: 3rem;
-  font-weight: 800;
-  text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
-  z-index: 2;
-}
-
-.corner-label {
-  color: white;
-  font-size: 0.9rem;
-  font-weight: 800;
-  position: absolute;
-  text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
-  z-index: 2;
-}
-
-.top-left { left: 8px; top: 6px; }
-.bottom-right { bottom: 6px; right: 8px; transform: rotate(180deg); }
-
-/* Wild Card Colorful Background Circle */
-.wild-bg {
-  background: conic-gradient(#ef4444 0deg 90deg, #3b82f6 90deg 180deg, #eab308 180deg 270deg, #22c55e 270deg 360deg);
-  border-radius: 50%;
-  filter: blur(8px);
-  height: 80px;
-  opacity: 0.8;
-  position: absolute;
-  width: 80px;
-  z-index: 1;
-}
-
-/* Draw Pile Styling */
-.draw-pile .playing-card.card-back {
-  background: #111827;
-  box-shadow: 1px 1px 0 #ef4444, 2px 2px 0 #111827, 3px 3px 0 #ef4444, 4px 4px 0 #111827, 5px 5px 0 #ef4444, 6px 6px 10px rgba(0,0,0,0.5);
-  cursor: pointer;
-}
-
-.draw-pile:hover .playing-card {
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-  transform: scale(1.05) rotate(-2deg);
-}
-.draw-pile:active .playing-card { transform: scale(0.95); }
-
-.inner-logo {
-  color: #ef4444;
-  font-size: 1.5rem;
-  font-weight: 900;
-  transform: rotate(-5deg);
-  z-index: 5;
-}
-
-.card-placeholder {
-  border: 2px dashed rgba(255,255,255,0.2);
-  border-radius: 12px;
-  height: 140px;
-  width: 100px;
-}
-
-/* Active color glow behind discard pile */
-.active-color-glow {
-  border: 2px solid transparent;
-  border-radius: 16px;
-  height: 150px;
-  left: 50%;
-  pointer-events: none;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  transition: all 0.5s ease;
-  width: 110px;
-  z-index: 0;
-}
-
-/* --- OPPONENTS --- */
-.opponent-seat {
-  align-items: center;
-  display: flex;
-  height: 120px;
-  justify-content: center;
-  position: absolute;
-  width: 120px;
-}
-
-.opponent-content {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  opacity: 0.6;
-  position: relative;
-  transition: all 0.3s;
-}
-
-.opponent-content.is-active {
-  opacity: 1;
-  transform: scale(1.15);
-}
-
-.opponent-content.is-active .avatar-circle {
-  border-color: #facc15;
-  box-shadow: 0 0 15px #facc15, 0 0 30px rgba(250, 204, 21, 0.4);
-}
-
-.avatar-group {
-  align-items: center;
-  background: rgba(15, 23, 42, 0.8);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  padding: 5px;
-  z-index: 5;
-}
-
-.avatar-circle {
-  align-items: center;
-  background: #475569;
-  border: 3px solid #334155;
-  border-radius: 50%;
-  color: white;
-  display: flex;
-  font-size: 1.2rem;
-  font-weight: bold;
-  height: 50px;
-  justify-content: center;
-  margin-bottom: 5px;
-  width: 50px;
-}
-
-.op-name {
-  color: white;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.mini-hand {
-  display: flex;
-  height: 40px;
-  left: 60px;
-  position: absolute;
-  top: 10px;
-}
-
-.mini-card {
-  background: #64748b;
-  border: 1px solid #94a3b8;
-  border-radius: 3px;
-  height: 30px;
-  margin-left: -12px;
-  transform-origin: bottom center;
-  width: 20px;
-}
-
-/* --- TURN BANNER --- */
-.turn-banner {
-  backdrop-filter: blur(4px);
-  background: rgba(0,0,0,0.5);
-  border-radius: 20px;
-  bottom: 220px;
-  color: #94a3b8;
-  font-size: 1rem;
-  font-weight: bold;
-  left: 50%;
-  padding: 8px 24px;
-  pointer-events: none;
-  position: absolute;
-  transform: translateX(-50%);
-  transition: all 0.3s;
-}
-
-.turn-banner.my-turn {
-  background: #22c55e;
-  box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
-  color: white;
-  transform: translateX(-50%) scale(1.1);
-}
-
-/* --- MY HAND --- */
-.my-hand-container {
-  align-items: flex-end;
-  background: linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0) 100%);
-  bottom: 0;
-  display: flex;
-  height: 200px;
-  justify-content: center;
-  left: 0;
-  padding-bottom: 20px;
-  position: absolute;
-  width: 100%;
-}
-
-.hand-scroll {
-  display: flex;
-  margin-left: 20px;
-  padding: 0 40px;
-}
-
-.hand-card {
-  margin-right: -50px;
-}
-
-.hand-card:last-child { margin-right: 0; }
-
-/* Only hover if PLAYABLE */
-.hand-card.playable:hover {
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-  margin-right: 0px;
-  transform: translateY(-40px) scale(1.1) rotate(2deg);
-  z-index: 50;
-}
-
-.hand-card.playable { cursor: pointer; }
-
-/* Unplayable cards (Greyed out) */
-.hand-card.unplayable {
-  cursor: not-allowed;
-  filter: grayscale(0.8) brightness(0.7);
-  opacity: 0.8;
-  transform: scale(0.95);
-}
+@keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes zoom-in { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
 
 @media (max-width: 600px) {
   .card-placeholder { height: 120px; width: 80px; }

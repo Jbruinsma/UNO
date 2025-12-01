@@ -122,6 +122,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                         game_state = game_manager.start_game(current_game_id)
                         await send_game_update(game_state, current_game_id, "game_started")
 
+                elif action == "end_game":
+                    if current_game_id:
+                        game_manager.end_game(current_game_id)
+
                 elif action == "process_turn":
                     if current_game_id:
                         turn_action: Optional[str] = extra.get("action") if extra else None

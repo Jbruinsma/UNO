@@ -38,6 +38,28 @@ class GameManager:
         }
         return self.games[game_id]
 
+    def reset_game(self, game_id: str):
+        game = self.games.get(game_id)
+        if not game:
+            raise Exception("Game ID collision. Try again.")
+
+        game[game_id]["state"] = "waiting"
+        game[game_id]["current_player_index"] = None
+        game[game_id]["current_active_color"] = None
+        game[game_id]["direction"] = 1
+        game[game_id]["event"] = None
+        game[game_id]["deck"] = []
+        game[game_id]["discard_pile"] = []
+        game[game_id]["player_cards"] = {}
+
+        return self.games[game_id]
+
+    def end_game(self, game_id: str):
+        if game_id in self.games:
+            del self.games[game_id]
+
+        return self.reset_game(game_id)
+
     def advance_turn(self, game_id: str):
         game = self.games.get(game_id)
         if not game:
@@ -196,12 +218,14 @@ class GameManager:
                 game["discard_pile"].append(card)
                 game["player_cards"][current_player_id].remove(card)
 
+                if len(game["player_cards"][current_player_id]) == 0:
+                    self.set_event(game_id, "win", current_player_id)
+                    return game
+
                 if not is_wild_card:
                     game["current_active_color"] = card_color
 
                 if is_special_card:
-
-                    print("CARD: ", card)
 
                     if card_value == 'S':
                         self.advance_turn(game_id)
@@ -212,7 +236,6 @@ class GameManager:
                         self.set_event(game_id, "reverse", None)
 
                     elif card[2:] == 'D2':
-                        print("playing draw2 card")
                         next_p_index = advance_turn_counter(
                             game["current_player_index"],
                             len(players),
@@ -224,7 +247,6 @@ class GameManager:
                         return game
 
                 elif is_wild_card:
-                    # Trigger Frontend Modal to turn color
                     if 'Wild' in card and 'W4' not in card:
                         self.set_event(game_id, "wild_color_pick", current_player_id)
                         return game

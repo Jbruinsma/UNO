@@ -165,6 +165,12 @@ export function useGameWebSocket() {
     }
   };
 
+  const endGame = () => {
+    if (socket.value) {
+      socket.value.send(JSON.stringify({ action: "end_game" }));
+    }
+  }
+
   const playCard = (card: string) => {
 
     console.log("Playing card:", card);
@@ -233,6 +239,7 @@ export function useGameWebSocket() {
     joinGame,
     leaveGame,
     startGame,
+    endGame,
     playCard,
     drawCard,
     changeColorWithWild,
