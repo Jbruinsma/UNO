@@ -19,19 +19,20 @@ const {
 // Filter opponents (Everyone except me)
 const opponents = computed(() => players.value.filter(p => p !== playerId.value));
 
-// --- Positioning Logic (Circular Table) ---
+// --- Positioning Logic (Full Circle Spread) ---
 const getOpponentStyle = (index: number, total: number) => {
   if (total === 1) return { top: '0%', left: '50%', transform: 'translate(-50%, -50%)' };
 
-  // Place opponents in an arc from 180deg (Left) to 360deg (Right)
-  const startAngle = 180;
-  const endAngle = 360;
+  // Spread from 135deg (Bottom-Left) to 405deg (Bottom-Right)
+  const startAngle = 135;
+  const endAngle = 405;
   const range = endAngle - startAngle;
+
   const step = range / (total + 1);
   const angle = startAngle + (step * (index + 1));
   const rad = (angle * Math.PI) / 180;
 
-  const radius = 42; // Distance from center (%)
+  const radius = 53;
 
   const left = 50 + (radius * Math.cos(rad));
   const top = 50 + (radius * Math.sin(rad));
@@ -43,23 +44,63 @@ const getOpponentStyle = (index: number, total: number) => {
   };
 };
 
-// --- Card Helper Logic ---
-const getCardStyle = (cardCode: string) => {
-  if (!cardCode) return { color: 'gray', label: '?' };
+// --- Enhanced Card Style Logic ---
+const getCardMeta = (cardCode: string) => {
+  if (!cardCode) return { bg: '#cbd5e1', label: '?', isWild: false, color: '#64748b' };
+
   const [colorCode, val] = cardCode.split('-');
 
+  // Standard Uno Colors
   const colors: Record<string, string> = {
-    'R': '#ef4444', 'B': '#3b82f6', 'G': '#22c55e', 'Y': '#eab308', 'W': '#1f2937'
+    'R': '#ef4444', // Red
+    'B': '#3b82f6', // Blue
+    'G': '#22c55e', // Green
+    'Y': '#eab308', // Yellow
+    'W': '#0f172a'  // Wild (Dark Slate/Black)
   };
+
+  let label = val;
+  let isWild = false;
+
+  // Map special codes to display symbols
+  if (val === 'S') label = '⊘';      // Skip
+  else if (val === 'R') label = '⇄'; // Reverse
+  else if (val === 'D2') label = '+2'; // Draw 2
+  else if (val === 'Wild') { label = '★'; isWild = true; } // Wild Star
+  else if (val === 'W4') { label = '+4'; isWild = true; } // Wild Draw 4
 
   return {
     bg: colors[colorCode] || '#94a3b8',
-    label: val
+    label: label,
+    isWild: isWild,
+    color: 'white' // Text color
   };
 };
 
+// --- Game Logic: Playable Check ---
+const isCardPlayable = (card: string) => {
+  if (!topCard.value) return false;
+
+  const [cColor, cValue] = card.split('-');
+  const [tColor, tValue] = topCard.value.split('-');
+
+  // 1. Wild cards are always playable (W-Wild, W-W4)
+  if (cColor === 'W') return true;
+
+  // 2. Match Color
+  if (cColor === tColor) return true;
+
+  // 3. Match Value (e.g. 5==5, S==S, R==R)
+  if (cValue === tValue) return true;
+
+  return false;
+};
+
 const handleCardClick = (card: string) => {
-  if (isMyTurn.value) playCard(card);
+  // Only allow click if it is my turn AND the card is playable
+  if (isMyTurn.value && isCardPlayable(card)) {
+    playCard(card);
+  }
 };
 </script>
 
@@ -99,11 +140,18 @@ const handleCardClick = (card: string) => {
           <div
             v-if="topCard"
             class="playing-card face-up"
-            :style="{ backgroundColor: getCardStyle(topCard).bg }"
+            :style="{ backgroundColor: getCardMeta(topCard).bg }"
           >
-            <span class="card-value">{{ getCardStyle(topCard).label }}</span>
+            <!-- Background Wild Pattern -->
+            <div v-if="getCardMeta(topCard).isWild" class="wild-bg"></div>
+
+            <!-- Corner Labels -->
+            <span class="corner-label top-left">{{ getCardMeta(topCard).label }}</span>
+            <span class="corner-label bottom-right">{{ getCardMeta(topCard).label }}</span>
+
+            <!-- Main Center Value -->
+            <span class="card-value">{{ getCardMeta(topCard).label }}</span>
           </div>
-          <!-- Placeholder slot if empty -->
           <div v-else class="card-placeholder"></div>
         </div>
 
@@ -152,11 +200,22 @@ const handleCardClick = (card: string) => {
           v-for="(card, index) in myHand"
           :key="`${card}-${index}`"
           class="playing-card hand-card"
-          :class="{ 'playable': isMyTurn }"
-          :style="{ backgroundColor: getCardStyle(card).bg }"
+          :class="{
+            'playable': isMyTurn && isCardPlayable(card),
+            'unplayable': !(isMyTurn && isCardPlayable(card))
+          }"
+          :style="{ backgroundColor: getCardMeta(card).bg }"
           @click="handleCardClick(card)"
         >
-          <span class="card-value">{{ getCardStyle(card).label }}</span>
+          <!-- Background Wild Pattern -->
+          <div v-if="getCardMeta(card).isWild" class="wild-bg"></div>
+
+          <!-- Corner Labels -->
+          <span class="corner-label top-left">{{ getCardMeta(card).label }}</span>
+          <span class="corner-label bottom-right">{{ getCardMeta(card).label }}</span>
+
+          <!-- Main Center Value -->
+          <span class="card-value">{{ getCardMeta(card).label }}</span>
         </div>
       </div>
     </div>
@@ -215,12 +274,9 @@ const handleCardClick = (card: string) => {
   z-index: 10;
 }
 
-.card-pile {
-  position: relative;
-  /* Ensure container doesn't block clicks */
-}
+.card-pile { position: relative; }
 
-/* Shared Card Style for Hand, Draw, and Discard */
+/* Shared Card Style */
 .playing-card {
   width: 100px;
   height: 140px;
@@ -234,13 +290,52 @@ const handleCardClick = (card: string) => {
   border: 4px solid white;
   user-select: none;
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  overflow: hidden; /* Keeps corner labels inside */
+  z-index: 1; /* Fixes overlap issue by creating a local stacking context */
 }
 
-/* Specific Draw Pile Styling */
+/* --- NEW CARD FACE STYLES --- */
+.card-value {
+  color: white;
+  font-size: 3rem;
+  font-weight: 800;
+  text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
+  z-index: 2; /* Sit above wild bg */
+}
+
+.corner-label {
+  position: absolute;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: white;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
+  z-index: 2;
+}
+
+.top-left { top: 6px; left: 8px; }
+.bottom-right { bottom: 6px; right: 8px; transform: rotate(180deg); }
+
+/* Wild Card Colorful Background Circle */
+.wild-bg {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: conic-gradient(
+    #ef4444 0deg 90deg,
+    #3b82f6 90deg 180deg,
+    #eab308 180deg 270deg,
+    #22c55e 270deg 360deg
+  );
+  opacity: 0.8;
+  filter: blur(8px);
+  z-index: 1;
+}
+
+/* Draw Pile Styling */
 .draw-pile .playing-card.card-back {
-  background: #111827; /* Dark background */
+  background: #111827;
   cursor: pointer;
-  /* Layered shadow to look like a stack */
   box-shadow:
     1px 1px 0 #ef4444,
     2px 2px 0 #111827,
@@ -250,21 +345,18 @@ const handleCardClick = (card: string) => {
     6px 6px 10px rgba(0,0,0,0.5);
 }
 
-/* Draw Pile Hover Animation */
 .draw-pile:hover .playing-card {
   transform: scale(1.05) rotate(-2deg);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5); /* Lift up effect */
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
 }
-
-.draw-pile:active .playing-card {
-  transform: scale(0.95);
-}
+.draw-pile:active .playing-card { transform: scale(0.95); }
 
 .inner-logo {
   color: #ef4444;
   font-weight: 900;
   font-size: 1.5rem;
   transform: rotate(-5deg);
+  z-index: 5;
 }
 
 .card-placeholder {
@@ -272,13 +364,6 @@ const handleCardClick = (card: string) => {
   height: 140px;
   border: 2px dashed rgba(255,255,255,0.2);
   border-radius: 12px;
-}
-
-.card-value {
-  color: white;
-  font-size: 3rem;
-  font-weight: 800;
-  text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
 }
 
 /* --- OPPONENTS --- */
@@ -405,12 +490,12 @@ const handleCardClick = (card: string) => {
 
 .hand-card {
   margin-right: -50px;
-  /* Uses .playing-card style automatically */
 }
 
 .hand-card:last-child { margin-right: 0; }
 
-.hand-card:hover {
+/* Only hover if PLAYABLE */
+.hand-card.playable:hover {
   transform: translateY(-40px) scale(1.1) rotate(2deg);
   z-index: 50;
   margin-right: 0px;
@@ -418,6 +503,14 @@ const handleCardClick = (card: string) => {
 }
 
 .hand-card.playable { cursor: pointer; }
+
+/* Unplayable cards (Greyed out) */
+.hand-card.unplayable {
+  filter: grayscale(0.8) brightness(0.7);
+  opacity: 0.8;
+  cursor: not-allowed;
+  transform: scale(0.95);
+}
 
 @media (max-width: 600px) {
   .table-surface { width: 90vw; height: 90vw; top: 40%; }

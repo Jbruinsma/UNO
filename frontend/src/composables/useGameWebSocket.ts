@@ -22,6 +22,8 @@ const topCard = ref<string>("");
 const currentPlayerId = ref<string>("");
 const direction = ref<number>(1); // 1 for clockwise, -1 for counter-clockwise
 const otherPlayerCardCounts = ref<Record<string, number>>({}) // {uuid: cardCount}
+const lockDrawableCardPile = ref<boolean>(false);
+const lockDrawableDeck = ref<boolean>(false);
 
 export function useGameWebSocket() {
 
@@ -162,8 +164,15 @@ export function useGameWebSocket() {
   };
 
   const drawCard = () => {
-    if (socket.value) {
-        socket.value.send(JSON.stringify({ action: "draw_card" }));
+    if (socket.value) { socket.value.send(JSON.stringify({action: "draw_card"})); }
+
+    try {
+      lockDrawableCardPile.value = true;
+      console.log("Drawing card...");
+    } catch (e) {
+      console.log("Error drawing card:", e);
+    } finally {
+      lockDrawableCardPile.value = false;
     }
   };
 
