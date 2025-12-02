@@ -209,30 +209,22 @@ watch(event, (newEvent) => {
       wildCardIsDraw4.value = true;
     }
 
-  } else if (eventType === 'draw4') {
-    if (affectedPlayerId === playerId.value) { triggerDrawAnimation(4); }
+  } else if (eventType === 'draw4' || eventType === 'draw2') {
 
-  } else if (eventType === 'draw2') {
-    if (affectedPlayerId === playerId.value) { triggerDrawAnimation(2); }
+    const count: number = eventType === 'draw4' ? 4 : 2;
+    if (affectedPlayerId === playerId.value) { triggerDrawAnimation(count); }
 
   } else if (eventType === 'win') {
 
-    console.log("WIN DETECTED")
-
-    // Identify Winner
     winnerName.value = playerNames.value[originPlayerId] || 'Player';
-
-    // 1. Show Winner Animation
     showWinnerAnimation.value = true;
-
-    // 2. Cleanup Backend Connection
     endGame();
 
-    // 3. Transition to Modal after 3 seconds
     setTimeout(() => {
       showWinnerAnimation.value = false;
       showGameOverModal.value = true;
     }, 3000);
+
   }
 });
 </script>

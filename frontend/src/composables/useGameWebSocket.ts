@@ -10,6 +10,7 @@ const playerId = ref<string>("");
 const playerName = ref<string>("");
 const currentGameId = ref<string | null>(null);
 const gameState = ref<"LANDING" | "LOBBY" | "PLAYING">("LANDING");
+const playerStates = ref<Record<string,"PLAYING" | "READY">>({});
 
 // Lobby State
 const hostId = ref<string>("");
@@ -88,6 +89,7 @@ export function useGameWebSocket() {
         hostId.value = data.creator;
         players.value = data.players;
         playerNames.value = data.player_names;
+        if (data.player_states) playerStates.value = data.player_states;
         gameState.value = "LOBBY";
         resetInGameState();
         break;
@@ -96,6 +98,7 @@ export function useGameWebSocket() {
         players.value = data.players;
         playerNames.value = data.player_names;
         hostId.value = data.host_id;
+        if (data.player_states) playerStates.value = data.player_states;
 
         if (data.new_player_id === playerId.value) {
           currentGameId.value = data.game_id;
@@ -119,7 +122,6 @@ export function useGameWebSocket() {
 
       case "game_started":
         gameState.value = "PLAYING";
-        break;
 
       case "game_update":
         console.log("Game Update:", data);
@@ -128,6 +130,7 @@ export function useGameWebSocket() {
         if (data.current_player) currentPlayerId.value = data.current_player;
         if (data.hand) myHand.value = data.hand;
         if (data.card_counts) otherPlayerCardCounts.value = data.card_counts;
+        if (data.player_states) playerStates.value = data.player_states;
 
         if (data.direction) {
           const newDirection = data.direction;
@@ -154,6 +157,12 @@ export function useGameWebSocket() {
   };
 
   // --- Actions ---
+
+  const statusCheck = () => {
+    if (socket.value) {
+      socket.value.send(JSON.stringify({ action: "status_check" }));
+    }
+  }
 
   const createGame = (displayName: string) => {
     if (!socket.value) initConnection(displayName);
@@ -244,6 +253,7 @@ export function useGameWebSocket() {
     otherPlayerCardCounts,
     event,
     gameState,
+    playerStates,
     players,
     playerNames,
     hostId,
@@ -260,6 +270,7 @@ export function useGameWebSocket() {
     // Actions
     initConnection,
     disconnect,
+    statusCheck,
     createGame,
     joinGame,
     leaveGame,

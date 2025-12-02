@@ -71,6 +71,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                 action = payload.get("action")
                 extra = payload.get("extra")
 
+                if action == "status_check":
+                    await broadcast_lobby_state()
+
                 if action == "create_game":
                     new_game_id = generate_game_id()
                     while game_manager.get_game(new_game_id):
@@ -107,7 +110,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                             "player_names": game_state["player_names"],
                             "new_player_id": client_id,
                             "new_player_name": client_display_name,
-                            "message": f"{client_display_name} has joined the game!"
+                            "message": f"{client_display_name} has joined the game!",
+                            "player_states": game_state["player_states"]
                         }
                         await broadcast_to_room(target_id, response)
                         await broadcast_lobby_state()
@@ -137,7 +141,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                     if current_game_id:
                         game_state = game_manager.start_game(current_game_id)
                         await send_game_update(game_state, current_game_id, "game_started")
-                        await broadcast_lobby_state()
+                        # await broadcast_lobby_state()
 
                 elif action == "end_game":
                     if current_game_id:
@@ -207,7 +211,8 @@ async def send_game_update(game_state: dict, current_game_id: str, event: str = 
                 for other_player_id in players
                 if other_player_id != player_id
             },
-            "game_event": game_state["event"]
+            "game_event": game_state["event"],
+            "player_states": game_state["player_states"]
         }
 
         await connection_manager.send_personal_message(

@@ -12,7 +12,7 @@ class GameManager:
     Does NOT know about WebSockets. Only knows about User IDs.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.games: Dict[str, Dict] = {}
 
     def create_game(self, game_id: str, host_id: str, host_name: str):
@@ -25,6 +25,9 @@ class GameManager:
             "players": [host_id],
             "player_names": {
                 host_id: host_name
+            },
+            "player_states": {
+                host_id: "ready"
             },
             "current_player_index": None,
             "current_active_color": None,
@@ -117,6 +120,7 @@ class GameManager:
         if user_id not in game["players"]:
             game["players"].append(user_id)
             game["player_names"][user_id] = user_name
+            game["player_states"][user_id] = "ready"
             game["player_cards"][user_id] = []
 
         return game
@@ -137,6 +141,8 @@ class GameManager:
 
             if user_id in game["players"]:
                 game["players"].remove(user_id)
+                del game["player_states"][user_id]
+
                 # Reassign host if needed
                 if user_id == game["host_id"] and len(game["players"]) > 0:
                     game["host_id"] = game["players"][0]
@@ -152,7 +158,14 @@ class GameManager:
         if len(player_ids) < 2:
             raise Exception("Not enough players to start game.")
 
+        player_states = set(game["player_states"])
+        if "playing" in player_states:
+            return game
+
         game["state"] = "playing"
+        for player_id in player_ids:
+            game["player_states"][player_id] = "playing"
+
         game["deck"] = create_deck()
 
         for player_id in player_ids:

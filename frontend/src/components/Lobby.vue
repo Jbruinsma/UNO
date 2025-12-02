@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import {onMounted, ref} from 'vue';
+import {onMounted, ref, computed, watch} from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket';
 
 const {
   currentGameId,
   players,
   playerNames,
+  playerStates,
   playerId,
   hostId,
   isHost,
   isConnected,
   leaveGame,
-  startGame
+  startGame,
+  statusCheck
 } = useGameWebSocket();
 
 const showNotification = ref(false);
@@ -28,10 +30,20 @@ const getInitials = (name: string) => {
   return name ? name.substring(0, 1).toUpperCase() : '??';
 };
 
-onMounted( () => {
-    console.log("Is connected?", isConnected.value)
-  }
-)
+const allPlayersReady = computed(() => {
+  if (players.value.length === 0) return false;
+  return players.value.every(pId => playerStates.value[pId] === 'READY');
+});
+
+const getStatusLabel = (pId: string) => {
+  const state = playerStates.value[pId];
+  if (state === 'PLAYING') return 'Playing';
+  return 'Ready';
+};
+
+watch(playerStates.value, () => {
+  console.log("SOMEONE JOINED")
+})
 
 </script>
 
@@ -84,6 +96,10 @@ onMounted( () => {
               <span class="name">{{ playerNames[pId] }}</span>
               <span v-if="pId === playerId" class="me-tag">YOU</span>
             </div>
+
+            <div class="status-badge" :class="playerStates[pId] === 'READY' ? 'status-ready' : 'status-playing'">
+              {{ getStatusLabel(pId) }}
+            </div>
           </div>
         </TransitionGroup>
 
@@ -103,10 +119,14 @@ onMounted( () => {
             Host will start the game
           </div>
 
+          <div v-if="isHost && !allPlayersReady" class="waiting-warning">
+            Wait for everyone to finish...
+          </div>
+
           <button
             v-if="isHost"
             class="btn btn-start"
-            :disabled="players.length < 2"
+            :disabled="players.length < 2 || !allPlayersReady"
             @click="startGame"
           >
             Start Game
@@ -157,12 +177,16 @@ onMounted( () => {
 .room-code-box { align-items: center; background: #0f172a; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); color: white; cursor: pointer; display: flex; flex-direction: column; padding: 8px 16px; transition: all 0.2s ease; }
 .room-code-box:active { transform: scale(0.96); }
 .room-code-box:hover { background: #1e293b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); transform: translateY(-2px); }
+.status-badge { border-radius: 8px; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; text-transform: uppercase; }
+.status-playing { background: #fed7aa; color: #c2410c; }
+.status-ready { background: #bbf7d0; color: #15803d; }
 .subtext { color: #64748b; font-size: 0.9rem; margin: 0; }
 .toast-icon { width: 24px; height: 24px; color: #4ade80; }
 .toast-enter-active, .toast-leave-active { transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
 .waiting-for-host { color: #64748b; font-size: 0.9rem; font-style: italic; font-weight: 500; }
 .waiting-state { align-items: center; color: #94a3b8; display: flex; flex-direction: column; font-weight: 500; gap: 1rem; margin-top: 3rem; opacity: 0.8; }
+.waiting-warning { color: #eab308; font-size: 0.85rem; font-weight: 700; }
 
 @keyframes ping { 75%, 100% { opacity: 0; transform: scale(2); } }
 </style>
