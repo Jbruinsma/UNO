@@ -17,11 +17,22 @@ def generate_game_id(length=4):
     return ''.join(random.choices(string.ascii_uppercase, k=length))
 
 
+async def broadcast_lobby_state():
+    """
+    Sends the current list of available games to EVERYONE connected.
+    Useful for updating the 'Join Game' screen for users not yet in a game.
+    """
+    lobby_data = game_manager.get_lobby_info()
+    message = {
+        "event": "lobby_update",
+        "games": lobby_data
+    }
+    await connection_manager.broadcast(json.dumps(message))
+
+
 async def broadcast_to_room(game_id: str, message: dict):
     """
     Helper to send a message ONLY to players in a specific room.
-    1. Gets player IDs from GameManager.
-    2. Sends message via ConnectionManager.
     """
     player_ids = game_manager.get_player_ids(game_id)
     json_msg = json.dumps(message)
@@ -37,13 +48,13 @@ async def root():
 
 @app.websocket("/ws/{client_id}/{client_display_name}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str, client_display_name: str):
-    """
-    Handles the WebSocket connection.
-    1. Connects the user.
-    2. Listens for JSON messages.
-    3. Routes actions (create_game, join_game, leave_game, chat).
-    """
     await connection_manager.connect(websocket, client_id, client_display_name)
+
+    await connection_manager.send_personal_message(json.dumps({
+        "event": "lobby_update",
+        "games": game_manager.get_lobby_info()
+    }), client_id)
+
     current_game_id = None
 
     try:
@@ -64,6 +75,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                     new_game_id = generate_game_id()
                     while game_manager.get_game(new_game_id):
                         new_game_id = generate_game_id()
+
                     game_manager.create_game(new_game_id, client_id, client_display_name)
                     current_game_id = new_game_id
 
@@ -78,6 +90,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                         "message": f"Room {new_game_id} created."
                     }
                     await broadcast_to_room(new_game_id, response)
+                    await broadcast_lobby_state()
 
                 elif action == "join_game":
                     target_id = payload.get("game_id", "").upper()
@@ -97,6 +110,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                             "message": f"{client_display_name} has joined the game!"
                         }
                         await broadcast_to_room(target_id, response)
+                        await broadcast_lobby_state()
 
                     except Exception as e:
                         error_response = {
@@ -108,34 +122,39 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                 elif action == "leave_game":
                     if current_game_id:
                         game_manager.remove_player(current_game_id, client_id)
+
                         await broadcast_to_room(current_game_id, {
                             "event": "player_left",
                             "player_id": client_id,
                             "player_name": client_display_name,
                             "message": f"{client_display_name} left the game."
                         })
+
+                        await broadcast_lobby_state()
                         current_game_id = None
 
                 elif action == "start_game":
-
                     if current_game_id:
                         game_state = game_manager.start_game(current_game_id)
                         await send_game_update(game_state, current_game_id, "game_started")
+                        await broadcast_lobby_state()
 
                 elif action == "end_game":
                     if current_game_id:
                         game_manager.end_game(current_game_id)
+                        await broadcast_lobby_state()
 
                 elif action == "process_turn":
                     if current_game_id:
                         turn_action: Optional[str] = extra.get("action") if extra else None
                         card: Optional[str] = extra.get("card") if extra else None
                         advance_turn: bool = extra.get("advance_turn", True)
-                        game_state = game_manager.process_turn(client_id, current_game_id, turn_action, card, advance_turn)
+
+                        game_state = game_manager.process_turn(client_id, current_game_id, turn_action, card,
+                                                               advance_turn)
                         await send_game_update(game_state, current_game_id)
 
                 else:
-
                     if current_game_id:
                         await broadcast_to_room(current_game_id, {
                             "event": "message",
@@ -157,12 +176,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
 
         if current_game_id and user_left_id:
             game_manager.remove_player(current_game_id, user_left_id)
+
             await broadcast_to_room(current_game_id, {
                 "event": "player_left",
                 "player_id": user_left_id,
                 "player_name": client_display_name,
                 "message": f"{client_display_name} disconnected unexpectedly."
             })
+            await broadcast_lobby_state()
 
 
 async def send_game_update(game_state: dict, current_game_id: str, event: str = "game_update"):
@@ -178,9 +199,9 @@ async def send_game_update(game_state: dict, current_game_id: str, event: str = 
             "game_id": current_game_id,
             "current_active_color": game_state["current_active_color"],
             "direction": game_state["direction"],
-            "top_card": game_state["discard_pile"][-1],
+            "top_card": game_state["discard_pile"][-1] if game_state["discard_pile"] else None,
             "current_player": current_player_id,
-            "hand": player_cards[player_id],
+            "hand": player_cards.get(player_id, []),
             "card_counts": {
                 other_player_id: len(player_cards[other_player_id])
                 for other_player_id in players

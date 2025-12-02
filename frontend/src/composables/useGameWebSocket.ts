@@ -15,8 +15,9 @@ const gameState = ref<"LANDING" | "LOBBY" | "PLAYING">("LANDING");
 const hostId = ref<string>("");
 const players = ref<string[]>([]); // List of Player IDs
 const playerNames = ref<Record<string, string>>({}); // Map: ID -> Name
+const availableGames = ref<any[]>([]);
 
-// --- NEW: In-Game State ---
+// --- In-Game State ---
 const myHand = ref<string[]>([]);
 const currentActiveColor = ref<string>("");
 const topCard = ref<string>("");
@@ -25,7 +26,6 @@ const direction = ref<number>(1); // 1 for clockwise, -1 for counter-clockwise
 const otherPlayerCardCounts = ref<Record<string, number>>({}) // {uuid: cardCount}
 const event = ref<Record<string, any>>({});
 const lockDrawableCardPile = ref<boolean>(false);
-const lockDrawableDeck = ref<boolean>(false);
 
 export function useGameWebSocket() {
 
@@ -62,6 +62,9 @@ export function useGameWebSocket() {
 
     socket.value.onclose = () => {
       isConnected.value = false;
+      players.value = [];
+      availableGames.value = [];
+      currentGameId.value = null;
     };
   };
 
@@ -75,37 +78,48 @@ export function useGameWebSocket() {
 
   const handleMessage = (data: any) => {
     switch (data.event) {
+      // --- Global Lobby Events ---
+      case "lobby_update":
+        availableGames.value = data.games || [];
+        break;
+
       case "game_created":
         currentGameId.value = data.game_id;
         hostId.value = data.creator;
         players.value = data.players;
         playerNames.value = data.player_names;
         gameState.value = "LOBBY";
+        resetInGameState();
         break;
 
       case "player_joined":
         players.value = data.players;
         playerNames.value = data.player_names;
         hostId.value = data.host_id;
-        // If I am the one joining, switch to lobby
+
         if (data.new_player_id === playerId.value) {
           currentGameId.value = data.game_id;
           gameState.value = "LOBBY";
+          resetInGameState();
         }
         break;
 
       case "player_left":
         players.value = players.value.filter((id) => id !== data.player_id);
-        delete playerNames.value[data.player_id];
-        // If host left, frontend temp fix (backend should handle real logic)
+        const newNames = { ...playerNames.value };
+        delete newNames[data.player_id];
+        playerNames.value = newNames;
+
         if (data.player_id === hostId.value && players.value.length > 0) {
-           hostId.value = players.value[0];
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+           // @ts-expect-error
+          hostId.value = players.value[0];
         }
         break;
 
-      // --- NEW: Game Logic Handling ---
       case "game_started":
         gameState.value = "PLAYING";
+        break;
 
       case "game_update":
         console.log("Game Update:", data);
@@ -131,6 +145,14 @@ export function useGameWebSocket() {
     }
   };
 
+  const resetInGameState = () => {
+    myHand.value = [];
+    topCard.value = "";
+    currentActiveColor.value = "";
+    event.value = {};
+    direction.value = 1;
+  };
+
   // --- Actions ---
 
   const createGame = (displayName: string) => {
@@ -151,11 +173,15 @@ export function useGameWebSocket() {
 
   const leaveGame = () => {
     if (socket.value) {
+      console.log("Leaving game...");
       socket.value.send(JSON.stringify({ action: "leave_game" }));
+      console.log("JSON SENT")
       gameState.value = "LANDING";
       players.value = [];
       currentGameId.value = null;
-      myHand.value = [];
+      resetInGameState();
+    } else {
+      console.warn("Tried to leave game when not connected!");
     }
   };
 
@@ -172,9 +198,7 @@ export function useGameWebSocket() {
   }
 
   const playCard = (card: string) => {
-
     console.log("Playing card:", card);
-
     if (socket.value) {
         socket.value.send(JSON.stringify({
           action: "process_turn",
@@ -227,6 +251,7 @@ export function useGameWebSocket() {
     currentActiveColor,
     topCard,
     currentPlayerId,
+    availableGames,
 
     // Computeds
     isHost,

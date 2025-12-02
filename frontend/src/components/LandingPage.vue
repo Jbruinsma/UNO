@@ -75,7 +75,7 @@ const handleJoin = () => {
 
       <div v-if="isConnected" class="status-indicator">
         <div class="dot" :class="{ active: isConnected }"></div>
-        <span>Connected'</span>
+        <span>Connected</span>
       </div>
 
       <div class="input-group name-group">

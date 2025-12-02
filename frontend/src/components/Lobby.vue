@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useGameWebSocket } from '../composables/useGameWebSocket.ts';
+import {onMounted, ref} from 'vue';
+import { useGameWebSocket } from '../composables/useGameWebSocket';
 
 const {
   currentGameId,
@@ -9,6 +9,7 @@ const {
   playerId,
   hostId,
   isHost,
+  isConnected,
   leaveGame,
   startGame
 } = useGameWebSocket();
@@ -19,16 +20,19 @@ const copyCode = () => {
   if (currentGameId.value) {
     navigator.clipboard.writeText(currentGameId.value);
     showNotification.value = true;
-
-    setTimeout(() => {
-      showNotification.value = false;
-    }, 3000);
+    setTimeout(() => { showNotification.value = false; }, 3000);
   }
 };
 
 const getInitials = (name: string) => {
   return name ? name.substring(0, 1).toUpperCase() : '??';
 };
+
+onMounted( () => {
+    console.log("Is connected?", isConnected.value)
+  }
+)
+
 </script>
 
 <template>
@@ -43,6 +47,10 @@ const getInitials = (name: string) => {
       </div>
     </Transition>
 
+    <div v-if="!isConnected" class="connection-warning">
+      Trying to reconnect...
+    </div>
+
     <div class="lobby-card">
 
       <div class="lobby-header">
@@ -55,41 +63,28 @@ const getInitials = (name: string) => {
           <div class="code-label">ENTRY CODE</div>
           <div class="code-row">
             <span class="code">{{ currentGameId }}</span>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="copy-icon">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M15.75 18H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08M15.75 18.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5A3.375 3.375 0 0 0 6.375 7.5H5.25m11.9-3.664A2.251 2.251 0 0 0 15 2.25h-1.5a2.251 2.251 0 0 0-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v12c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V16.5a9 9 0 0 0-9-9Z" />
-            </svg>
+            <span class="copy-icon">❐</span>
           </div>
         </div>
       </div>
 
       <div class="player-grid-container">
         <TransitionGroup name="list" tag="div" class="player-grid">
-
           <div
             v-for="pId in players"
             :key="pId"
             class="player-card"
-            :class="{
-              'is-me': pId === playerId,
-              'is-host': pId === hostId
-            }"
+            :class="{ 'is-me': pId === playerId, 'is-host': pId === hostId }"
           >
-            <div v-if="pId === hostId" class="crown-icon" title="Host">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-              </svg>
-            </div>
+            <div v-if="pId === hostId" class="crown-icon" title="Host">👑</div>
 
-            <div class="avatar">
-              {{ getInitials(playerNames[pId]) }}
-            </div>
+            <div class="avatar">{{ getInitials(playerNames[pId]) }}</div>
 
             <div class="player-info">
               <span class="name">{{ playerNames[pId] }}</span>
               <span v-if="pId === playerId" class="me-tag">YOU</span>
             </div>
           </div>
-
         </TransitionGroup>
 
         <div v-if="players.length < 2" class="waiting-state">
@@ -100,9 +95,6 @@ const getInitials = (name: string) => {
 
       <div class="lobby-footer">
         <button class="btn btn-leave" @click="leaveGame">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="btn-icon">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
-          </svg>
           Leave
         </button>
 
@@ -118,9 +110,6 @@ const getInitials = (name: string) => {
             @click="startGame"
           >
             Start Game
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="btn-icon right">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-            </svg>
           </button>
         </div>
       </div>
@@ -130,350 +119,50 @@ const getInitials = (name: string) => {
 </template>
 
 <style scoped>
-.lobby-container {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #e11d48 0%, #9f1239 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Segoe UI', sans-serif;
-  padding: 1rem;
-}
-
-.lobby-card {
-  background: #f8fafc;
-  width: 100%;
-  max-width: 650px;
-  border-radius: 24px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* --- Header --- */
-.lobby-header {
-  background: white;
-  padding: 1.5rem 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.header-content h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  color: #0f172a;
-  font-weight: 800;
-}
-
-.subtext {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.room-code-box {
-  background: #0f172a;
-  color: white;
-  padding: 8px 16px;
-  border-radius: 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.room-code-box:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  background: #1e293b;
-}
-
+.avatar { align-items: center; background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%); border-radius: 50%; box-shadow: inset 0 2px 4px rgba(255,255,255,0.3); color: white; display: flex; font-size: 1.5rem; font-weight: 700; height: 64px; justify-content: center; width: 64px; }
+.btn { align-items: center; border: none; border-radius: 12px; cursor: pointer; display: inline-flex; font-size: 1rem; font-weight: 700; gap: 8px; padding: 12px 24px; transition: all 0.2s; }
+.btn-leave { background: white; border: 2px solid #fecaca; color: #ef4444; }
+.btn-leave:hover { background: #fef2f2; border-color: #ef4444; }
+.btn-start { background: #10b981; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3); color: white; }
+.btn-start:disabled { background: #cbd5e1; box-shadow: none; color: #94a3b8; cursor: not-allowed; }
+.btn-start:hover:not(:disabled) { background: #059669; transform: translateY(-1px); }
+.code { font-size: 1.5rem; font-weight: 800; letter-spacing: 2px; line-height: 1; }
+.code-label { color: #94a3b8; font-size: 0.6rem; font-weight: 700; letter-spacing: 1px; margin-bottom: 2px; }
+.code-row { align-items: center; display: flex; gap: 8px; }
+.connection-warning { background: #facc15; color: #854d0e; font-weight: bold; padding: 10px; position: fixed; text-align: center; top: 0; width: 100%; z-index: 2000; }
+.copy-icon { color: #38bdf8; font-size: 1.2rem; }
+.copy-notification { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 12px 24px; border-radius: 50px; display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); z-index: 100; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
+.crown-icon { background: #facc15; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); color: #854d0e; font-size: 1.2rem; height: 28px; padding: 4px; position: absolute; right: -10px; text-align: center; top: -10px; transform: rotate(15deg); width: 28px; z-index: 10; }
+.header-content h2 { color: #0f172a; font-size: 1.5rem; font-weight: 800; margin: 0; }
+.icon-check { color: #4ade80; font-size: 1.2rem; }
+.is-host .avatar { border: 3px solid #facc15; }
+.is-me { background: #f0f9ff; border-color: #38bdf8; }
+.is-me .avatar { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); }
+.list-enter-active, .list-leave-active, .list-move { transition: all 0.4s ease; }
+.list-enter-from, .list-leave-to { opacity: 0; transform: scale(0.9) translateY(10px); }
+.list-leave-active { position: absolute; }
+.lobby-card { background: #f8fafc; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; max-width: 650px; overflow: hidden; width: 100%; }
+.lobby-container { align-items: center; background: linear-gradient(135deg, #e11d48 0%, #9f1239 100%); display: flex; font-family: 'Segoe UI', sans-serif; justify-content: center; min-height: 100vh; padding: 1rem; }
+.lobby-footer { align-items: center; background: white; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; padding: 1.5rem 2rem; }
+.lobby-header { align-items: center; background: white; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; padding: 1.5rem 2rem; }
+.me-tag { align-self: center; background: rgba(14, 165, 233, 0.1); border-radius: 10px; color: #0ea5e9; font-size: 0.65rem; font-weight: 800; padding: 2px 8px; }
+.name { color: #1e293b; font-size: 1rem; font-weight: 700; max-width: 140px; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.player-card { align-items: center; background: white; border: 2px solid transparent; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; gap: 12px; padding: 1.2rem; position: relative; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.player-card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); transform: translateY(-4px); }
+.player-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.player-grid-container { background: #f1f5f9; flex-grow: 1; min-height: 300px; padding: 2rem; }
+.player-info { display: flex; flex-direction: column; gap: 4px; text-align: center; }
+.pulse-ring { animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; border: 4px solid #cbd5e1; border-radius: 50%; height: 40px; width: 40px; }
+.right-actions { align-items: center; display: flex; gap: 1rem; }
+.room-code-box { align-items: center; background: #0f172a; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); color: white; cursor: pointer; display: flex; flex-direction: column; padding: 8px 16px; transition: all 0.2s ease; }
 .room-code-box:active { transform: scale(0.96); }
+.room-code-box:hover { background: #1e293b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); transform: translateY(-2px); }
+.subtext { color: #64748b; font-size: 0.9rem; margin: 0; }
+.toast-icon { width: 24px; height: 24px; color: #4ade80; }
+.toast-enter-active, .toast-leave-active { transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
+.waiting-for-host { color: #64748b; font-size: 0.9rem; font-style: italic; font-weight: 500; }
+.waiting-state { align-items: center; color: #94a3b8; display: flex; flex-direction: column; font-weight: 500; gap: 1rem; margin-top: 3rem; opacity: 0.8; }
 
-.code-label {
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: #94a3b8;
-  letter-spacing: 1px;
-  margin-bottom: 2px;
-}
-
-.code-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.code {
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: 2px;
-  line-height: 1;
-}
-
-.copy-icon { width: 18px; height: 18px; color: #38bdf8; }
-
-
-/* --- Player Grid --- */
-.player-grid-container {
-  padding: 2rem;
-  background: #f1f5f9;
-  flex-grow: 1;
-  min-height: 300px;
-}
-
-.player-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1.2rem;
-}
-
-/* THE PLAYER CARD STYLE */
-.player-card {
-  background: white;
-  padding: 1.2rem;
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  position: relative;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid transparent;
-}
-
-/* Hover Effect */
-.player-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-}
-
-/* Current User Styling */
-.player-card.is-me {
-  border-color: #38bdf8; /* Blue border */
-  background: #f0f9ff;
-}
-
-/* Host Styling (Optional subtle border) */
-.player-card.is-host {
-  /* border-color: #facc15; */
-}
-
-/* Crown Icon */
-.crown-icon {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  background: #facc15;
-  color: #854d0e;
-  width: 28px;
-  height: 28px;
-  padding: 4px;
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transform: rotate(15deg);
-  z-index: 10;
-}
-
-/* Avatar Styling */
-.avatar {
-  width: 64px;
-  height: 64px;
-  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  font-weight: 700;
-  box-shadow: inset 0 2px 4px rgba(255,255,255,0.3);
-}
-
-.player-card.is-me .avatar {
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); /* Blue gradient for Me */
-}
-
-.player-card.is-host .avatar {
-  border: 3px solid #facc15; /* Gold ring for Host */
-}
-
-/* Name & Info */
-.player-info {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.name {
-  font-weight: 700;
-  color: #1e293b;
-  font-size: 1rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 140px;
-}
-
-.me-tag {
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: #0ea5e9;
-  background: rgba(14, 165, 233, 0.1);
-  padding: 2px 8px;
-  border-radius: 10px;
-  align-self: center;
-}
-
-/* --- Waiting State --- */
-.waiting-state {
-  margin-top: 3rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  color: #94a3b8;
-  font-weight: 500;
-  opacity: 0.8;
-}
-
-.pulse-ring {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #cbd5e1;
-  border-radius: 50%;
-  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-@keyframes ping {
-  75%, 100% {
-    transform: scale(2);
-    opacity: 0;
-  }
-}
-
-/* --- Footer --- */
-.lobby-footer {
-  padding: 1.5rem 2rem;
-  background: white;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 1rem;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s;
-}
-
-.btn-icon { width: 20px; height: 20px; }
-
-.btn-leave {
-  background: white;
-  color: #ef4444;
-  border: 2px solid #fecaca;
-}
-
-.btn-leave:hover {
-  background: #fef2f2;
-  border-color: #ef4444;
-}
-
-.btn-start {
-  background: #10b981;
-  color: white;
-  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3);
-}
-
-.btn-start:hover:not(:disabled) {
-  background: #059669;
-  transform: translateY(-1px);
-}
-
-.btn-start:disabled {
-  background: #cbd5e1;
-  color: #94a3b8;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.waiting-for-host {
-  color: #64748b;
-  font-style: italic;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-/* --- List Transitions --- */
-.list-move,
-.list-enter-active,
-.list-leave-active {
-  transition: all 0.4s ease;
-}
-
-.list-enter-from,
-.list-leave-to {
-  opacity: 0;
-  transform: scale(0.9) translateY(10px);
-}
-
-.list-leave-active {
-  position: absolute; /* Ensures smooth removal flow */
-}
-
-/* --- Toast Notification --- */
-.copy-notification {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%); /* Centers it horizontally */
-
-  background: #1e293b; /* Dark slate background */
-  color: white;
-  padding: 12px 24px;
-  border-radius: 50px; /* Pill shape */
-
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-  z-index: 100; /* Ensure it sits on top of everything */
-  font-weight: 600;
-  border: 1px solid rgba(255,255,255,0.1);
-}
-
-.toast-icon {
-  width: 24px;
-  height: 24px;
-  color: #4ade80; /* Bright green for success */
-}
-
-/* Toast Animation (Slide down and fade) */
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translate(-50%, -20px); /* Starts slightly higher */
-}
+@keyframes ping { 75%, 100% { opacity: 0; transform: scale(2); } }
 </style>
