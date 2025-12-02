@@ -141,12 +141,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                     if current_game_id:
                         game_state = game_manager.start_game(current_game_id)
                         await send_game_update(game_state, current_game_id, "game_started")
-                        # await broadcast_lobby_state()
 
                 elif action == "end_game":
                     if current_game_id:
                         game_manager.end_game(current_game_id)
-                        await broadcast_lobby_state()
 
                 elif action == "back_to_lobby":
                     if current_game_id:

@@ -89,6 +89,7 @@ export function useGameWebSocket() {
         break;
 
       case "player_back_to_lobby":
+
   if (data.player_states) playerStates.value = data.player_states;
   break;
 
@@ -103,8 +104,6 @@ export function useGameWebSocket() {
         break;
 
       case "player_joined":
-
-        console.log("Player Joined:", data);
 
         players.value = data.players;
         playerNames.value = data.player_names;
@@ -193,9 +192,7 @@ export function useGameWebSocket() {
 
   const leaveGame = () => {
     if (socket.value) {
-      console.log("Leaving game...");
       socket.value.send(JSON.stringify({ action: "leave_game" }));
-      console.log("JSON SENT")
       gameState.value = "LANDING";
       players.value = [];
       currentGameId.value = null;
@@ -224,7 +221,6 @@ export function useGameWebSocket() {
   }
 
   const playCard = (card: string) => {
-    console.log("Playing card:", card);
     if (socket.value) {
         socket.value.send(JSON.stringify({
           action: "process_turn",

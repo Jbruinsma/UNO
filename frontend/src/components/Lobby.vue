@@ -172,7 +172,7 @@ const getStatusLabel = (pId: string) => {
 .room-code-box { align-items: center; background: #0f172a; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); color: white; cursor: pointer; display: flex; flex-direction: column; padding: 8px 16px; transition: all 0.2s ease; }
 .room-code-box:active { transform: scale(0.96); }
 .room-code-box:hover { background: #1e293b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); transform: translateY(-2px); }
-.status-badge { border-radius: 8px; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; text-transform: uppercase; }
+.status-badge { border-radius: 8px; font-size: 0.75rem; font-weight: 700; margin-top: auto; padding: 4px 10px; text-transform: uppercase; }
 .status-playing { background: #fed7aa; color: #c2410c; }
 .status-ready { background: #bbf7d0; color: #15803d; }
 .subtext { color: #64748b; font-size: 0.9rem; margin: 0; }

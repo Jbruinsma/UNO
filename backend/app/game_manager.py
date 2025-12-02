@@ -75,6 +75,7 @@ class GameManager:
         if game:
             game["player_states"][user_id] = "ready"
             return game
+        return None
 
     def advance_turn(self, game_id: str):
         game = self.games.get(game_id)
@@ -184,7 +185,7 @@ class GameManager:
             first_card = game["deck"].pop()
             first_card_color, _ = retrieve_card_info(first_card)
             game["discard_pile"].append(first_card)
-            game["current_active_color"] = first_card_color
+            game["current_active_color"] = first_card_color if first_card_color in REGULAR_CARDS else random.choice(list(REGULAR_CARDS))
 
         start_index = random.randint(0, len(player_ids) - 1)
         game["current_player_index"] = start_index

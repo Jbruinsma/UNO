@@ -28,6 +28,7 @@ const {
 const showReverseAnimation = ref(false);
 const showColorPicker = ref(false);
 const wildCardIsDraw4 = ref<boolean>(false);
+const skippedPlayerId = ref<string | null>(null);
 
 // --- Win/Game Over State ---
 const showWinnerAnimation = ref(false);
@@ -46,8 +47,9 @@ let nextFlyingId = 0;
 const opponents = computed(() => players.value.filter(p => p !== playerId.value));
 
 // --- Positioning Logic (Full Circle Spread) ---
-const getOpponentStyle = (index: number, total: number) => {
-  if (total === 1) return { top: '0%', left: '50%', transform: 'translate(-50%, -50%)' };
+// We expose this so we can reuse the logic for animations
+const getOpponentCoords = (index: number, total: number) => {
+  if (total === 1) return { top: 0, left: 50 }; // percentages
 
   // Spread from 135deg (Bottom-Left) to 405deg (Bottom-Right)
   const startAngle = 135;
@@ -58,11 +60,16 @@ const getOpponentStyle = (index: number, total: number) => {
   const angle = startAngle + (step * (index + 1));
   const rad = (angle * Math.PI) / 180;
 
-  const radius = 53;
+  const radius = 53; // distance from center %
 
   const left = 50 + (radius * Math.cos(rad));
   const top = 50 + (radius * Math.sin(rad));
 
+  return { left, top };
+};
+
+const getOpponentStyle = (index: number, total: number) => {
+  const { left, top } = getOpponentCoords(index, total);
   return {
     left: `${left}%`,
     top: `${top}%`,
@@ -133,6 +140,12 @@ const handleCardClick = (card: string) => {
   }
 };
 
+const handleDrawClick = () => {
+  if (isMyTurn.value) {
+    drawCard();
+  }
+};
+
 const handleColorSelect = (color: string) => {
   if (wildCardIsDraw4.value) { changeColorWithWildAndDraw4(color) }
   else { changeColorWithWild(color); }
@@ -151,44 +164,81 @@ const handleLeave = () => {
 };
 
 // --- ANIMATION CONTROLLER ---
+const createFlyingCard = (start: any, end: any, delay: number = 0) => {
+  setTimeout(() => {
+    const id = nextFlyingId++;
+
+    // Initial State
+    flyingCards.value.push({
+      id,
+      style: { ...start, transition: 'none' }
+    });
+
+    // Animate to End State
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const card = flyingCards.value.find(c => c.id === id);
+        if (card) {
+          card.style = {
+            ...end,
+            transition: 'all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)'
+          };
+        }
+      });
+    });
+
+    // Cleanup
+    setTimeout(() => {
+      flyingCards.value = flyingCards.value.filter(c => c.id !== id);
+    }, 700 + delay);
+  }, delay);
+};
+
 const triggerDrawAnimation = (count: number) => {
   for (let i = 0; i < count; i++) {
+    const isLast = i === count - 1;
+
+    // Trigger logic (only on last card for batch updates if needed, or every card)
+    // For draw animations from deck to self:
     setTimeout(() => {
-      const advanceTurnWithMove: boolean = i === count - 1;
-      drawCard(advanceTurnWithMove);
-
-      const id = nextFlyingId++;
-      const startStyle = {
-        top: '45%',
-        left: '50%',
-        opacity: 1,
-        transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)',
-        transition: 'none'
-      };
-
-      flyingCards.value.push({ id, style: startStyle });
-
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const card = flyingCards.value.find(c => c.id === id);
-          if (card) {
-            card.style = {
-              top: '90%',
-              left: '50%',
-              opacity: 0,
-              transform: `translate(-50%, -50%) scale(1) rotate(${Math.random() * 20 - 10}deg)`,
-              transition: 'all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)'
-            };
-          }
-        });
-      });
-
-      setTimeout(() => {
-        flyingCards.value = flyingCards.value.filter(c => c.id !== id);
-      }, 700);
-
+      drawCard(isLast);
     }, i * 250);
+
+    // Visual Animation (Deck -> Center Bottom)
+    createFlyingCard(
+      {
+        top: '45%', left: '50%', opacity: 1,
+        transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)'
+      },
+      {
+        top: '90%', left: '50%', opacity: 0,
+        transform: `translate(-50%, -50%) scale(1) rotate(${Math.random() * 20 - 10}deg)`
+      },
+      i * 250
+    );
   }
+};
+
+const triggerOpponentPlayAnimation = (playerId: string) => {
+  const index = opponents.value.indexOf(playerId);
+  if (index === -1) return;
+
+  const { left, top } = getOpponentCoords(index, opponents.value.length);
+
+  createFlyingCard(
+    {
+      top: `${top}%`,
+      left: `${left}%`,
+      opacity: 1,
+      transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)'
+    },
+    {
+      top: '50%', // Center (Discard Pile)
+      left: '50%',
+      opacity: 0, // Fade out as it hits the pile
+      transform: 'translate(-50%, -50%) scale(1) rotate(0deg)'
+    }
+  );
 };
 
 watch(event, (newEvent) => {
@@ -198,9 +248,25 @@ watch(event, (newEvent) => {
   const originPlayerId = newEvent.player_id;
   const affectedPlayerId = newEvent.affected_player_id;
 
-  if (eventType === 'reverse') {
+  if (eventType === 'play_card') {
+    if (originPlayerId !== playerId.value) {
+      triggerOpponentPlayAnimation(originPlayerId);
+    }
+
+  } else if (eventType === 'reverse') {
     showReverseAnimation.value = true;
     setTimeout(() => { showReverseAnimation.value = false; }, 2000);
+
+  } else if (eventType === 'skip') {
+    // Set skipped player to show the X overlay
+    if (affectedPlayerId) {
+      skippedPlayerId.value = affectedPlayerId;
+      setTimeout(() => {
+        if (skippedPlayerId.value === affectedPlayerId) {
+          skippedPlayerId.value = null;
+        }
+      }, 2000);
+    }
 
   } else if (eventType === 'wild_color_pick') {
     if (playerId.value === originPlayerId) { showColorPicker.value = true; }
@@ -212,21 +278,17 @@ watch(event, (newEvent) => {
     }
 
   } else if (eventType === 'draw4' || eventType === 'draw2') {
-
     const count: number = eventType === 'draw4' ? 4 : 2;
     if (affectedPlayerId === playerId.value) { triggerDrawAnimation(count); }
 
   } else if (eventType === 'win') {
-
     winnerName.value = playerNames.value[originPlayerId] || 'Player';
     showWinnerAnimation.value = true;
     endGame();
-
     setTimeout(() => {
       showWinnerAnimation.value = false;
       showGameOverModal.value = true;
     }, 3000);
-
   }
 });
 </script>
@@ -315,7 +377,11 @@ watch(event, (newEvent) => {
 
       <div class="center-area">
 
-        <div class="card-pile draw-pile" @click="drawCard">
+        <div
+          class="card-pile draw-pile"
+          :class="{ 'disabled-pile': !isMyTurn }"
+          @click="handleDrawClick"
+        >
           <div class="playing-card card-back">
             <span class="inner-logo">UNO</span>
           </div>
@@ -349,12 +415,22 @@ watch(event, (newEvent) => {
         :style="getOpponentStyle(index, opponents.length)"
       >
         <div class="opponent-content" :class="{ 'is-active': opId === currentPlayerId }">
+
           <div class="avatar-group">
             <div class="avatar-circle">
               {{ playerNames[opId]?.charAt(0).toUpperCase() }}
+
+              <!-- Skip Overlay for Opponents -->
+              <div v-if="skippedPlayerId === opId" class="skip-badge">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="skip-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+              </div>
+
             </div>
             <span class="op-name">{{ playerNames[opId] }}</span>
           </div>
+
           <div class="mini-hand">
             <div
               v-for="n in (otherPlayerCardCounts[opId] || 0)"
@@ -367,6 +443,16 @@ watch(event, (newEvent) => {
       </div>
 
     </div>
+
+    <!-- Self Skip Notification (Optional visual for when YOU are skipped) -->
+    <Transition name="fade">
+      <div v-if="skippedPlayerId === playerId" class="self-skip-alert">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="skip-icon-large">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        <span>SKIPPED!</span>
+      </div>
+    </Transition>
 
     <div class="turn-banner" :class="{ 'my-turn': isMyTurn }">
       {{ isMyTurn ? "YOUR TURN" : `${playerNames[currentPlayerId] || 'Someone'}'s Turn` }}
@@ -403,7 +489,7 @@ watch(event, (newEvent) => {
 .action-btn.secondary { background: #475569; color: white; }
 .active-color-glow { border: 2px solid transparent; border-radius: 16px; height: 150px; left: 50%; pointer-events: none; position: absolute; top: 50%; transform: translate(-50%, -50%); transition: all 0.5s ease; width: 110px; z-index: 0; }
 .arrow-svg { fill: none; height: 100%; stroke: white; stroke-width: 2; width: 100%; }
-.avatar-circle { align-items: center; background: #475569; border: 3px solid #334155; border-radius: 50%; color: white; display: flex; font-size: 1.2rem; font-weight: bold; height: 50px; justify-content: center; margin-bottom: 5px; width: 50px; }
+.avatar-circle { align-items: center; background: #475569; border: 3px solid #334155; border-radius: 50%; color: white; display: flex; font-size: 1.2rem; font-weight: bold; height: 50px; justify-content: center; margin-bottom: 5px; position: relative; width: 50px; }
 .avatar-group { align-items: center; background: rgba(15, 23, 42, 0.8); border-radius: 12px; display: flex; flex-direction: column; padding: 5px; z-index: 5; }
 .blue { background-color: #3b82f6; color: #3b82f6; }
 .bottom-right { bottom: 6px; right: 8px; transform: rotate(180deg); }
@@ -419,9 +505,11 @@ watch(event, (newEvent) => {
 .crown-icon { animation: bounce 1s infinite; font-size: 8rem; margin-bottom: 20px; }
 .direction-ring { animation: rotate-cw 20s linear infinite; height: 100%; opacity: 0.15; pointer-events: none; position: absolute; width: 100%; }
 .direction-ring.counter-clockwise { animation: rotate-ccw 20s linear infinite; }
+.draw-pile.disabled-pile { cursor: not-allowed; filter: grayscale(1); opacity: 0.5; }
 .draw-pile .playing-card.card-back { background: #111827; box-shadow: 1px 1px 0 #ef4444, 2px 2px 0 #111827, 3px 3px 0 #ef4444, 4px 4px 0 #111827, 5px 5px 0 #ef4444, 6px 6px 10px rgba(0,0,0,0.5); cursor: pointer; }
 .draw-pile:active .playing-card { transform: scale(0.95); }
 .draw-pile:hover .playing-card { box-shadow: 0 10px 25px rgba(0,0,0,0.5); transform: scale(1.05) rotate(-2deg); }
+.disabled-pile:hover .playing-card { transform: none; box-shadow: 1px 1px 0 #ef4444, 2px 2px 0 #111827, 3px 3px 0 #ef4444, 4px 4px 0 #111827, 5px 5px 0 #ef4444, 6px 6px 10px rgba(0,0,0,0.5); }
 .flying-card-layer { height: 100vh; left: 0; pointer-events: none; position: fixed; top: 0; width: 100vw; z-index: 500; }
 .flying-card-visual { height: 140px; position: absolute; width: 100px; }
 .game-container { background: #0f172a; display: flex; flex-direction: column; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; position: relative; width: 100vw; }
@@ -455,6 +543,10 @@ watch(event, (newEvent) => {
 .reverse-icon { font-size: 6rem; line-height: 1; }
 .reverse-overlay { align-items: center; animation: pop-spin 2s ease-in-out forwards; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); border-radius: 30px; color: #facc15; display: flex; flex-direction: column; height: 250px; justify-content: center; left: 50%; pointer-events: none; position: absolute; top: 50%; transform: translate(-50%, -50%); width: 300px; z-index: 200; }
 .reverse-text { font-size: 2rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+.self-skip-alert { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 10px; color: #ef4444; z-index: 500; font-weight: 900; font-size: 2rem; text-shadow: 0 4px 10px rgba(0,0,0,0.5); animation: bounce-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; }
+.skip-badge { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); animation: bounce-in 0.3s ease-out; border: 2px solid #1e293b; }
+.skip-icon { width: 16px; height: 16px; stroke-width: 3; }
+.skip-icon-large { width: 64px; height: 64px; stroke-width: 2.5; }
 .table-surface { align-items: center; background: radial-gradient(circle, #334155 0%, #1e293b 70%); border-radius: 50%; box-shadow: 0 0 50px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.2); display: flex; height: 70vh; justify-content: center; left: 50%; position: absolute; top: 45%; transform: translate(-50%, -50%); width: 70vh; }
 .top-left { left: 8px; top: 6px; }
 .turn-banner { backdrop-filter: blur(4px); background: rgba(0,0,0,0.5); border-radius: 20px; bottom: 220px; color: #94a3b8; font-size: 1rem; font-weight: bold; left: 50%; padding: 8px 24px; pointer-events: none; position: absolute; transform: translateX(-50%); transition: all 0.3s; }
@@ -469,6 +561,7 @@ watch(event, (newEvent) => {
 @keyframes rotate-ccw { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
 @keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes zoom-in { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+@keyframes bounce-in { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
 
 @media (max-width: 600px) {
   .card-placeholder { height: 120px; width: 80px; }
