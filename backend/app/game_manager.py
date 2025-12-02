@@ -70,6 +70,12 @@ class GameManager:
     def end_game(self, game_id: str):
         self.reset_game(game_id)
 
+    def set_player_back_to_lobby(self, game_id: str, user_id: str):
+        game = self.games.get(game_id)
+        if game:
+            game["player_states"][user_id] = "ready"
+            return game
+
     def advance_turn(self, game_id: str):
         game = self.games.get(game_id)
         if not game: return

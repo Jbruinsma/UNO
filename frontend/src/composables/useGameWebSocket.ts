@@ -10,7 +10,7 @@ const playerId = ref<string>("");
 const playerName = ref<string>("");
 const currentGameId = ref<string | null>(null);
 const gameState = ref<"LANDING" | "LOBBY" | "PLAYING">("LANDING");
-const playerStates = ref<Record<string,"PLAYING" | "READY">>({});
+const playerStates = ref<Record<string,"playing" | "ready">>({});
 
 // Lobby State
 const hostId = ref<string>("");
@@ -78,11 +78,19 @@ export function useGameWebSocket() {
   };
 
   const handleMessage = (data: any) => {
+
+    console.log("Handling message:", data);
+
     switch (data.event) {
+
       // --- Global Lobby Events ---
       case "lobby_update":
         availableGames.value = data.games || [];
         break;
+
+      case "player_back_to_lobby":
+  if (data.player_states) playerStates.value = data.player_states;
+  break;
 
       case "game_created":
         currentGameId.value = data.game_id;
@@ -95,6 +103,9 @@ export function useGameWebSocket() {
         break;
 
       case "player_joined":
+
+        console.log("Player Joined:", data);
+
         players.value = data.players;
         playerNames.value = data.player_names;
         hostId.value = data.host_id;
@@ -162,7 +173,7 @@ export function useGameWebSocket() {
     if (socket.value) {
       socket.value.send(JSON.stringify({ action: "status_check" }));
     }
-  }
+  };
 
   const createGame = (displayName: string) => {
     if (!socket.value) initConnection(displayName);
@@ -203,6 +214,12 @@ export function useGameWebSocket() {
   const endGame = () => {
     if (socket.value) {
       socket.value.send(JSON.stringify({ action: "end_game" }));
+    }
+  };
+
+  const backToLobby = () => {
+    if (socket.value) {
+      socket.value.send(JSON.stringify({ action: "back_to_lobby" }));
     }
   }
 
@@ -276,6 +293,7 @@ export function useGameWebSocket() {
     leaveGame,
     startGame,
     endGame,
+    backToLobby,
     playCard,
     drawCard,
     changeColorWithWild,

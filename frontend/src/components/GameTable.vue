@@ -20,7 +20,8 @@ const {
   direction,
   otherPlayerCardCounts,
   event,
-  endGame
+  endGame,
+  backToLobby
 } = useGameWebSocket();
 
 // --- Local State ---
@@ -141,6 +142,7 @@ const handleColorSelect = (color: string) => {
 
 // --- Navigation Handlers ---
 const handleBackToLobby = () => {
+  backToLobby();
   gameState.value = 'LOBBY';
 };
 

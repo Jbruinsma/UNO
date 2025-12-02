@@ -74,7 +74,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                 if action == "status_check":
                     await broadcast_lobby_state()
 
-                if action == "create_game":
+                elif action == "create_game":
                     new_game_id = generate_game_id()
                     while game_manager.get_game(new_game_id):
                         new_game_id = generate_game_id()
@@ -147,6 +147,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                     if current_game_id:
                         game_manager.end_game(current_game_id)
                         await broadcast_lobby_state()
+
+                elif action == "back_to_lobby":
+                    if current_game_id:
+                        game_state = game_manager.set_player_back_to_lobby(current_game_id, client_id)
+                        await broadcast_to_room(current_game_id, {
+                            "event": "player_back_to_lobby",
+                            "player_states": game_state["player_states"]
+                        })
 
                 elif action == "process_turn":
                     if current_game_id:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {onMounted, ref, computed, watch} from 'vue';
+import {ref, computed} from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket';
 
 const {
@@ -12,8 +12,7 @@ const {
   isHost,
   isConnected,
   leaveGame,
-  startGame,
-  statusCheck
+  startGame
 } = useGameWebSocket();
 
 const showNotification = ref(false);
@@ -32,18 +31,14 @@ const getInitials = (name: string) => {
 
 const allPlayersReady = computed(() => {
   if (players.value.length === 0) return false;
-  return players.value.every(pId => playerStates.value[pId] === 'READY');
+  return players.value.every(pId => playerStates.value[pId] === 'ready');
 });
 
 const getStatusLabel = (pId: string) => {
   const state = playerStates.value[pId];
-  if (state === 'PLAYING') return 'Playing';
+  if (state === 'playing') return 'Playing';
   return 'Ready';
 };
-
-watch(playerStates.value, () => {
-  console.log("SOMEONE JOINED")
-})
 
 </script>
 
