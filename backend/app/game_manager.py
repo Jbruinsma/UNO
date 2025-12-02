@@ -13,9 +13,17 @@ class GameManager:
     """
 
     def __init__(self) -> None:
+        """
+        Initializes the GameManager with an empty dictionary of games.
+        """
+
         self.games: Dict[str, Dict] = {}
 
     def create_game(self, game_id: str, host_id: str, host_name: str):
+        """
+        Creates a new game and adds it to the manager.
+        """
+
         if game_id in self.games:
             raise Exception("Game ID collision. Try again.")
 
@@ -40,7 +48,10 @@ class GameManager:
         return self.games[game_id]
 
     def get_lobby_info(self) -> List[Dict]:
-        """Returns a summary of all games for the lobby browser."""
+        """
+        Returns a summary of all games for the lobby browser.
+        """
+
         lobby_data = []
         for g_id, g_data in self.games.items():
             lobby_data.append({
@@ -52,6 +63,10 @@ class GameManager:
         return lobby_data
 
     def reset_game(self, game_id: str):
+        """
+        Resets a game to its initial state.
+        """
+
         game = self.games.get(game_id)
         if not game:
             raise Exception("Game ID collision. Try again.")
@@ -68,9 +83,17 @@ class GameManager:
         return game
 
     def end_game(self, game_id: str):
+        """
+        Ends a game and removes it from the manager.
+        """
+
         self.reset_game(game_id)
 
     def set_player_back_to_lobby(self, game_id: str, user_id: str):
+        """
+        Sets a player back to the lobby after they've left.
+        """
+
         game = self.games.get(game_id)
         if game:
             game["player_states"][user_id] = "ready"
@@ -78,6 +101,10 @@ class GameManager:
         return None
 
     def advance_turn(self, game_id: str):
+        """
+        Advances the turn counter and resets the active color.
+        """
+
         game = self.games.get(game_id)
         if not game: return
 
@@ -89,11 +116,19 @@ class GameManager:
         game["current_player_index"] = advance_turn_counter(current_player_index, player_count, is_clockwise)
 
     def reverse_direction(self, game_id: str):
+        """
+        Reverses the direction of the game; clockwise (1) -> counterclockwise (-1), counterclockwise (-1) -> clockwise (1).
+        """
+
         game = self.games.get(game_id)
         if game:
             game["direction"] *= -1
 
     def use_wild_card(self, color: Optional[str], game_id: str):
+        """
+        Changes the active color to the color specified by the wild card.
+        """
+
         game = self.games.get(game_id)
         if not game: return None
 
@@ -110,13 +145,20 @@ class GameManager:
         self.advance_turn(game_id)
         return game
 
-    def set_event(self, game_id: str, event_type: str, player_id: Optional[str],
-                  affected_player_id: Optional[str] = None):
+    def set_event(self, game_id: str, event_type: str, player_id: Optional[str], affected_player_id: Optional[str] = None):
+        """
+        Sets the event for the frontend to display.
+        """
+
         game = self.games.get(game_id)
         if game:
             game["event"] = {"type": event_type, "player_id": player_id, "affected_player_id": affected_player_id}
 
     def join_game(self, game_id: str, user_id: str, user_name: str):
+        """
+        Adds a player to a game.
+        """
+
         game = self.games.get(game_id)
         if not game:
             raise Exception("Game does not exist.")
@@ -124,7 +166,13 @@ class GameManager:
         if game["state"] != "waiting":
             raise Exception("Game has already started.")
 
-        if user_id not in game["players"]:
+        players = game["players"]
+        player_count = len(players)
+
+        if player_count >= 10:
+            raise Exception("Game is full. Try again later.")
+
+        if user_id not in players:
             game["players"].append(user_id)
             game["player_names"][user_id] = user_name
             game["player_states"][user_id] = "ready"
@@ -133,13 +181,25 @@ class GameManager:
         return game
 
     def get_game(self, game_id: str):
+        """
+        Returns the game state for the frontend.
+        """
+
         return self.games.get(game_id)
 
     def get_player_ids(self, game_id: str) -> List[str]:
+        """
+        Returns a list of player IDs in the game.
+        """
+
         game = self.games.get(game_id)
         return game["players"] if game else []
 
     def remove_player(self, game_id: str, user_id: str):
+        """
+        Removes a player from a game.
+        """
+
         if game_id in self.games:
             game = self.games[game_id]
 
@@ -158,6 +218,10 @@ class GameManager:
                 del self.games[game_id]
 
     def start_game(self, game_id: str):
+        """
+        Starts the game if all players are ready.
+        """
+
         game = self.games.get(game_id)
         if not game: raise Exception("Game does not exist.")
 
@@ -192,8 +256,11 @@ class GameManager:
 
         return game
 
-    def process_turn(self, player_id: str, game_id: str, action: Optional[str], card: Optional[str] = None,
-                     advance_turn: bool = True):
+    def process_turn(self, player_id: str, game_id: str, action: Optional[str], card: Optional[str] = None, advance_turn: bool = True):
+        """
+        Processes a player's turn based on the action taken.
+        """
+
         game = self.games.get(game_id)
         if not game: raise Exception("Game does not exist.")
 

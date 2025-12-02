@@ -13,7 +13,10 @@ game_manager = GameManager()
 
 
 def generate_game_id(length=4):
-    """Generate a random 4-letter room ID (e.g., 'ABCD')"""
+    """
+    Generate a random 4-letter room ID (e.g., 'ABCD')
+    """
+
     return ''.join(random.choices(string.ascii_uppercase, k=length))
 
 
@@ -22,6 +25,7 @@ async def broadcast_lobby_state():
     Sends the current list of available games to EVERYONE connected.
     Useful for updating the 'Join Game' screen for users not yet in a game.
     """
+
     lobby_data = game_manager.get_lobby_info()
     message = {
         "event": "lobby_update",
@@ -34,6 +38,7 @@ async def broadcast_to_room(game_id: str, message: dict):
     """
     Helper to send a message ONLY to players in a specific room.
     """
+
     player_ids = game_manager.get_player_ids(game_id)
     json_msg = json.dumps(message)
 
@@ -43,11 +48,19 @@ async def broadcast_to_room(game_id: str, message: dict):
 
 @app.get("/")
 async def root():
+    """
+    Basic health check endpoint.
+    """
+
     return {"message": "UNO WebSocket server is running."}
 
 
 @app.websocket("/ws/{client_id}/{client_display_name}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str, client_display_name: str):
+    """
+    Main WebSocket endpoint. Handles all incoming messages from clients and handles game logic.
+    """
+
     await connection_manager.connect(websocket, client_id, client_display_name)
 
     await connection_manager.send_personal_message(json.dumps({
@@ -197,6 +210,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
 
 
 async def send_game_update(game_state: dict, current_game_id: str, event: str = "game_update"):
+    """
+    Sends a game update to all players in the current game.
+    """
+
     players = game_state["players"]
     player_cards = game_state["player_cards"]
 
