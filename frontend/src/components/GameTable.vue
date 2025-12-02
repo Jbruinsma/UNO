@@ -194,26 +194,43 @@ const createFlyingCard = (start: any, end: any, delay: number = 0) => {
   }, delay);
 };
 
-const triggerDrawAnimation = (count: number) => {
+const triggerDrawAnimation = (targetPlayerId: string, count: number) => {
+
+  // 1. Determine End Destination (Me or Opponent)
+  let endStyle: any;
+
+  if (targetPlayerId === playerId.value) {
+    // DESTINATION: ME (Bottom Center)
+    endStyle = {
+      top: '90%',
+      left: '50%',
+      opacity: 0,
+      transform: `translate(-50%, -50%) scale(1) rotate(${Math.random() * 20 - 10}deg)`
+    };
+  } else {
+    // DESTINATION: OPPONENT (Their Seat)
+    const index = opponents.value.indexOf(targetPlayerId);
+    if (index === -1) return; // Should not happen
+
+    const { left, top } = getOpponentCoords(index, opponents.value.length);
+    endStyle = {
+      top: `${top}%`,
+      left: `${left}%`,
+      opacity: 0,
+      transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)'
+    };
+  }
+
+  // 2. Loop through cards
   for (let i = 0; i < count; i++) {
-    const isLast = i === count - 1;
 
-    // Trigger logic (only on last card for batch updates if needed, or every card)
-    // For draw animations from deck to self:
-    setTimeout(() => {
-      drawCard(isLast);
-    }, i * 250);
-
-    // Visual Animation (Deck -> Center Bottom)
+    // START: Always the Deck (Center)
     createFlyingCard(
       {
         top: '45%', left: '50%', opacity: 1,
         transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)'
       },
-      {
-        top: '90%', left: '50%', opacity: 0,
-        transform: `translate(-50%, -50%) scale(1) rotate(${Math.random() * 20 - 10}deg)`
-      },
+      endStyle,
       i * 250
     );
   }
@@ -279,7 +296,12 @@ watch(event, (newEvent) => {
 
   } else if (eventType === 'draw4' || eventType === 'draw2') {
     const count: number = eventType === 'draw4' ? 4 : 2;
-    if (affectedPlayerId === playerId.value) { triggerDrawAnimation(count); }
+    // Animate for ANY affected player (Me or Opponent)
+    triggerDrawAnimation(affectedPlayerId, count);
+
+  } else if (eventType === 'draw_card') {
+    // Animate regular draws for ANY player
+    triggerDrawAnimation(originPlayerId, 1);
 
   } else if (eventType === 'win') {
     winnerName.value = playerNames.value[originPlayerId] || 'Player';
