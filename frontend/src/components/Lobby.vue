@@ -92,7 +92,7 @@ const getStatusLabel = (pId: string) => {
               <span v-if="pId === playerId" class="me-tag">YOU</span>
             </div>
 
-            <div class="status-badge" :class="playerStates[pId] === 'READY' ? 'status-ready' : 'status-playing'">
+            <div class="status-badge" :class="playerStates[pId] === 'ready' ? 'status-ready' : 'status-playing'">
               {{ getStatusLabel(pId) }}
             </div>
           </div>
