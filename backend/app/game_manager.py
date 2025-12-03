@@ -1,6 +1,7 @@
 import random
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
+from backend.app.pydantic_models.game import Game
 # Assuming these imports exist in your project structure
 from backend.app.utils import create_deck, SPECIAL_CARDS, WILD_CARDS, advance_turn_counter, retrieve_card_info, \
     REGULAR_CARDS
@@ -17,9 +18,9 @@ class GameManager:
         Initializes the GameManager with an empty dictionary of games.
         """
 
-        self.games: Dict[str, Dict] = {}
+        self.games: Dict[str, Game] = {}
 
-    def create_game(self, game_id: str, host_id: str, host_name: str):
+    def create_game(self, game_id: str, host_id: str, host_name: str) -> Game:
         """
         Creates a new game and adds it to the manager.
         """
@@ -27,24 +28,24 @@ class GameManager:
         if game_id in self.games:
             raise Exception("Game ID collision. Try again.")
 
-        self.games[game_id] = {
-            "host_id": host_id,
-            "state": "waiting",
-            "players": [host_id],
-            "player_names": {
+        self.games[game_id] = Game(
+            host_id=host_id,
+            state="waiting",
+            players=[host_id],
+            player_names={
                 host_id: host_name
             },
-            "player_states": {
+            player_states={
                 host_id: "ready"
             },
-            "current_player_index": None,
-            "current_active_color": None,
-            "direction": 1,  # 1 = clockwise, -1 = counterclockwise
-            "event": None,
-            "deck": [],
-            "discard_pile": [],
-            "player_cards": {}
-        }
+            current_player_index=None,
+            current_active_color=None,
+            direction=1,  # 1 = clockwise, -1 = counterclockwise
+            event=None,
+            deck=[],
+            discard_pile=[],
+            player_cards={}
+        )
         return self.games[game_id]
 
     def get_lobby_info(self) -> List[Dict]:
@@ -53,16 +54,16 @@ class GameManager:
         """
 
         lobby_data = []
-        for g_id, g_data in self.games.items():
+        for game_lobby_id, game_state in self.games.items():
             lobby_data.append({
-                "game_id": g_id,
-                "host_name": g_data["player_names"].get(g_data["host_id"], "Unknown"),
-                "player_count": len(g_data["players"]),
-                "state": g_data["state"]
+                "game_id": game_lobby_id,
+                "host_name": game_state.player_names.get(game_state.host_id, "Unknown"),
+                "player_count": len(game_state.players),
+                "state": game_state.state
             })
         return lobby_data
 
-    def reset_game(self, game_id: str):
+    def reset_game(self, game_id: str) -> Game:
         """
         Resets a game to its initial state.
         """
@@ -71,65 +72,68 @@ class GameManager:
         if not game:
             raise Exception("Game ID collision. Try again.")
 
-        game["state"] = "waiting"
-        game["current_player_index"] = None
-        game["current_active_color"] = None
-        game["direction"] = 1
-        game["event"] = None
-        game["deck"] = []
-        game["discard_pile"] = []
-        game["player_cards"] = {}
+        game.state = "waiting"
+        game.current_player_index = None
+        game.current_active_color = None
+        game.direction = 1
+        game.event = None
+        game.deck = []
+        game.discard_pile = []
+        game.player_cards = {}
 
         return game
 
-    def end_game(self, game_id: str):
+    def end_game(self, game_id: str) -> None:
         """
         Ends a game and removes it from the manager.
         """
 
         self.reset_game(game_id)
 
-    def set_player_back_to_lobby(self, game_id: str, user_id: str):
+    def set_player_back_to_lobby(self, game_id: str, user_id: str) -> Optional[Game]:
         """
         Sets a player back to the lobby after they've left.
         """
 
         game = self.games.get(game_id)
         if game:
-            game["player_states"][user_id] = "ready"
+            game.player_states[user_id] = "ready"
             return game
         return None
 
-    def advance_turn(self, game_id: str):
+    def advance_turn(self, game_id: str) -> None:
         """
         Advances the turn counter and resets the active color.
         """
 
-        game = self.games.get(game_id)
+        game: Optional[Game] = self.games.get(game_id)
         if not game: return
 
-        is_clockwise = game["direction"] == 1
-        current_player_index = game["current_player_index"]
-        players = game["players"]
-        player_count = len(players)
+        is_clockwise: bool = game.direction == 1
 
-        game["current_player_index"] = advance_turn_counter(current_player_index, player_count, is_clockwise)
+        assert game.current_player_index is not None
+        current_player_index: int = game.current_player_index
 
-    def reverse_direction(self, game_id: str):
+        players: List[str] = game.players
+        player_count: int = len(players)
+
+        game.current_player_index = advance_turn_counter(current_player_index, player_count, is_clockwise)
+
+    def reverse_direction(self, game_id: str) -> None:
         """
         Reverses the direction of the game; clockwise (1) -> counterclockwise (-1), counterclockwise (-1) -> clockwise (1).
         """
 
-        game = self.games.get(game_id)
+        game: Optional[Game] = self.games.get(game_id)
         if game:
-            game["direction"] *= -1
+            game.direction *= -1
 
-    def use_wild_card(self, color: Optional[str], game_id: str):
+    def use_wild_card(self, color: Optional[str], game_id: str) -> Optional[Game]:
         """
         Changes the active color to the color specified by the wild card.
         """
 
-        game = self.games.get(game_id)
+        game: Optional[Game] = self.games.get(game_id)
         if not game: return None
 
         if color is None:
@@ -141,46 +145,47 @@ class GameManager:
             self.advance_turn(game_id)
             return game
 
-        game["current_active_color"] = new_color
+        game.current_active_color = new_color
         self.advance_turn(game_id)
         return game
 
-    def set_event(self, game_id: str, event_type: str, player_id: Optional[str], affected_player_id: Optional[str] = None):
+    def set_event(self, game_id: str, event_type: str, player_id: Optional[str],
+                  affected_player_id: Optional[str] = None):
         """
         Sets the event for the frontend to display.
         """
 
         game = self.games.get(game_id)
         if game:
-            game["event"] = {"type": event_type, "player_id": player_id, "affected_player_id": affected_player_id}
+            game.event = {"type": event_type, "player_id": player_id, "affected_player_id": affected_player_id}
 
-    def join_game(self, game_id: str, user_id: str, user_name: str):
+    def join_game(self, game_id: str, user_id: str, user_name: str) -> Game:
         """
         Adds a player to a game.
         """
 
-        game = self.games.get(game_id)
+        game: Optional[Game] = self.games.get(game_id)
         if not game:
             raise Exception("Game does not exist.")
 
-        if game["state"] != "waiting":
+        if game.state != "waiting":
             raise Exception("Game has already started.")
 
-        players = game["players"]
-        player_count = len(players)
+        players: List[str] = game.players
+        player_count: int = len(players)
 
         if player_count >= 10:
             raise Exception("Game is full. Try again later.")
 
         if user_id not in players:
-            game["players"].append(user_id)
-            game["player_names"][user_id] = user_name
-            game["player_states"][user_id] = "ready"
-            game["player_cards"][user_id] = []
+            game.players.append(user_id)
+            game.player_names[user_id] = user_name
+            game.player_states[user_id] = "ready"
+            game.player_cards[user_id] = []
 
         return game
 
-    def get_game(self, game_id: str):
+    def get_game(self, game_id: str) -> Optional[Game]:
         """
         Returns the game state for the frontend.
         """
@@ -192,135 +197,144 @@ class GameManager:
         Returns a list of player IDs in the game.
         """
 
-        game = self.games.get(game_id)
-        return game["players"] if game else []
+        game: Optional[Game] = self.games.get(game_id)
+        return game.players if game else []
 
-    def remove_player(self, game_id: str, user_id: str):
+    def remove_player(self, game_id: str, user_id: str) -> None:
         """
         Removes a player from a game.
         """
 
         if game_id in self.games:
-            game = self.games[game_id]
+            game: Game = self.games[game_id]
+            players: List[str] = game.players
 
-            if "player_names" in game and user_id in game["player_names"]:
-                del game["player_names"][user_id]
+            if "player_names" in game.model_fields_set and user_id in game.player_names:
+                del game.player_names[user_id]
 
-            if user_id in game["players"]:
-                game["players"].remove(user_id)
-                del game["player_states"][user_id]
+            if user_id in players:
+                game.players.remove(user_id)
+                del game.player_states[user_id]
 
-                # Reassign host if needed
-                if user_id == game["host_id"] and len(game["players"]) > 0:
-                    game["host_id"] = game["players"][0]
+                if user_id == game.host_id and len(game.players) > 0:
+                    game.host_id = game.players[0]
 
-            if len(game["players"]) == 0:
+            if len(game.players) == 0:
                 del self.games[game_id]
 
-    def start_game(self, game_id: str):
+    def start_game(self, game_id: str) -> Game:
         """
         Starts the game if all players are ready.
         """
 
-        game = self.games.get(game_id)
+        game: Optional[Game] = self.games.get(game_id)
         if not game: raise Exception("Game does not exist.")
 
-        player_ids = game["players"]
+        player_ids: List[str] = game.players
         if len(player_ids) < 2:
             raise Exception("Not enough players to start game.")
 
-        player_states = set(game["player_states"])
+        player_states: Set[str] = set(game.player_states.values())
         if "playing" in player_states:
             return game
 
-        game["state"] = "playing"
+        game.state = "playing"
         for player_id in player_ids:
-            game["player_states"][player_id] = "playing"
+            game.player_states[player_id] = "playing"
 
-        game["deck"] = create_deck()
+        game.deck = create_deck()
 
         for player_id in player_ids:
-            game["player_cards"][player_id] = []
+            game.player_cards[player_id] = []
             for _ in range(7):
-                if len(game["deck"]) > 0:
-                    game["player_cards"][player_id].append(game["deck"].pop())
+                if len(game.deck) > 0:
+                    game.player_cards[player_id].append(game.deck.pop())
 
-        if len(game["deck"]) > 0:
-            first_card = game["deck"].pop()
+        if len(game.deck) > 0:
+            first_card: str = game.deck.pop()
             first_card_color, _ = retrieve_card_info(first_card)
-            game["discard_pile"].append(first_card)
-            game["current_active_color"] = first_card_color if first_card_color in REGULAR_CARDS else random.choice(list(REGULAR_CARDS))
+            game.discard_pile.append(first_card)
+            game.current_active_color = first_card_color if first_card_color in REGULAR_CARDS else random.choice(
+                list(REGULAR_CARDS))
 
-        start_index = random.randint(0, len(player_ids) - 1)
-        game["current_player_index"] = start_index
+        start_index: int = random.randint(0, len(player_ids) - 1)
+        game.current_player_index = start_index
 
         return game
 
-    def process_turn(self, player_id: str, game_id: str, action: Optional[str], card: Optional[str] = None, advance_turn: bool = True):
+    def process_turn(self, player_id: str, game_id: str, action: Optional[str], card: Optional[str] = None,
+                     advance_turn: bool = True) -> Optional[Game]:
         """
         Processes a player's turn based on the action taken.
         """
 
-        game = self.games.get(game_id)
+        game: Optional[Game] = self.games.get(game_id)
         if not game: raise Exception("Game does not exist.")
 
-        players = game["players"]
+        players: List[str] = game.players
         if not action: return game
 
-        game["event"] = None
+        if game.current_player_index is None: return game
+        current_player_index: int = game.current_player_index
+
+        game.event = None
 
         if action == "draw_card_from_middle":
-            current_player_id = players[game["current_player_index"]]
+            current_player_id = players[current_player_index]
             if current_player_id != player_id: return game
 
-            selected_card = game["deck"].pop()
-            game["player_cards"][current_player_id].append(selected_card)
+            selected_card = game.deck.pop()
+            game.player_cards[current_player_id].append(selected_card)
 
-            # --- UPDATE: Set Event so Frontend Animates ---
             self.set_event(game_id, "draw_card", current_player_id)
 
             if advance_turn: self.advance_turn(game_id)
             return game
 
         elif action == "play_card":
-            current_player_id = players[game["current_player_index"]]
+            current_player_id = players[current_player_index]
             if current_player_id != player_id or card is None: return game
 
             card_color, card_value = retrieve_card_info(card)
-            top_card = game["discard_pile"][-1]
+            top_card = game.discard_pile[-1]
             _, top_card_value = retrieve_card_info(top_card)
 
-            active_color = game.get("current_active_color")
+            active_color = game.current_active_color
             is_special_card = card_value in SPECIAL_CARDS or card[2:] in SPECIAL_CARDS
             is_wild_card = card in WILD_CARDS
 
             if is_wild_card or card_color == active_color or card_value == top_card_value:
-                game["discard_pile"].append(card)
-                game["player_cards"][current_player_id].remove(card)
+                game.discard_pile.append(card)
+                game.player_cards[current_player_id].remove(card)
 
                 self.set_event(game_id, "play_card", current_player_id)
 
-                if len(game["player_cards"][current_player_id]) == 0:
+                if len(game.player_cards[current_player_id]) == 0:
                     self.set_event(game_id, "win", current_player_id)
                     return game
 
                 if not is_wild_card:
-                    game["current_active_color"] = card_color
+                    game.current_active_color = card_color
 
                 if is_special_card:
                     if card_value == 'S':
                         self.advance_turn(game_id)
-                        self.set_event(game_id, "skip", None, game["players"][game["current_player_index"]])
+                        self.set_event(game_id, "skip", None, game.players[game.current_player_index])
                     elif card_value == 'R':
                         self.reverse_direction(game_id)
                         self.set_event(game_id, "reverse", None)
                     elif card[2:] == 'D2':
                         next_p_index = advance_turn_counter(
-                            game["current_player_index"],
+                            game.current_player_index,
                             len(players),
-                            game["direction"]
+                            game.direction == 1
                         )
-                        victim_id = game["players"][next_p_index]
+                        victim_id = players[next_p_index]
+
+                        for _ in range(2):
+                            if len(game.deck) > 0:
+                                game.player_cards[victim_id].append(game.deck.pop())
+
                         self.set_event(game_id, "draw2", current_player_id, victim_id)
                         self.advance_turn(game_id)
                         return game
@@ -340,18 +354,15 @@ class GameManager:
             return self.use_wild_card(card, game_id)
 
         elif action == "change_color_with_wild_and_draw4":
-            player_id = players[game["current_player_index"]]
+            player_id_initiator = players[game.current_player_index]
             self.use_wild_card(card, game_id)
+            victim_id = players[game.current_player_index]
 
-            next_p_index = advance_turn_counter(
-                game["current_player_index"],
-                len(players),
-                game["direction"]
-            )
+            for _ in range(4):
+                if len(game.deck) > 0:
+                    game.player_cards[victim_id].append(game.deck.pop())
 
-            victim_id = players[game["current_player_index"]]
-
-            self.set_event(game_id, "draw4", player_id, victim_id)
+            self.set_event(game_id, "draw4", player_id_initiator, victim_id)
             return game
 
         return game

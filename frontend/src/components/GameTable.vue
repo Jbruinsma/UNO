@@ -223,7 +223,6 @@ const triggerDrawAnimation = (targetPlayerId: string, count: number) => {
 
   // 2. Loop through cards
   for (let i = 0; i < count; i++) {
-
     // START: Always the Deck (Center)
     createFlyingCard(
       {
