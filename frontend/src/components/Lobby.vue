@@ -112,6 +112,7 @@ const getStatusLabel = (pId: string) => {
         <div class="right-actions">
           <div v-if="!isHost" class="waiting-for-host">
             Host will start the game
+            <div class="mini-spinner"></div>
           </div>
 
           <div v-if="isHost && !allPlayersReady" class="waiting-warning">
@@ -161,6 +162,8 @@ const getStatusLabel = (pId: string) => {
 .lobby-footer { align-items: center; background: white; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; padding: 1.5rem 2rem; }
 .lobby-header { align-items: center; background: white; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; padding: 1.5rem 2rem; }
 .me-tag { align-self: center; background: rgba(14, 165, 233, 0.1); border-radius: 10px; color: #0ea5e9; font-size: 0.65rem; font-weight: 800; padding: 2px 8px; }
+/* Added Spinner Styles */
+.mini-spinner { animation: spin 1s linear infinite; border: 2px solid #cbd5e1; border-radius: 50%; border-top-color: #64748b; height: 14px; width: 14px; }
 .name { color: #1e293b; font-size: 1rem; font-weight: 700; max-width: 140px; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .player-card { align-items: center; background: white; border: 2px solid transparent; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; gap: 12px; padding: 1.2rem; position: relative; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
 .player-card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); transform: translateY(-4px); }
@@ -179,9 +182,11 @@ const getStatusLabel = (pId: string) => {
 .toast-icon { width: 24px; height: 24px; color: #4ade80; }
 .toast-enter-active, .toast-leave-active { transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
-.waiting-for-host { color: #64748b; font-size: 0.9rem; font-style: italic; font-weight: 500; }
+/* Updated waiting-for-host to include Flexbox/Gap */
+.waiting-for-host { align-items: center; color: #64748b; display: flex; font-size: 0.9rem; font-style: italic; font-weight: 500; gap: 8px; }
 .waiting-state { align-items: center; color: #94a3b8; display: flex; flex-direction: column; font-weight: 500; gap: 1rem; margin-top: 3rem; opacity: 0.8; }
 .waiting-warning { color: #eab308; font-size: 0.85rem; font-weight: 700; }
 
 @keyframes ping { 75%, 100% { opacity: 0; transform: scale(2); } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
