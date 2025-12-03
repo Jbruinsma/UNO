@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue';
+import { computed, watch, ref, onMounted } from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket';
 
 const {
@@ -29,6 +29,8 @@ const showReverseAnimation = ref(false);
 const showColorPicker = ref(false);
 const wildCardIsDraw4 = ref<boolean>(false);
 const skippedPlayerId = ref<string | null>(null);
+const discardPileBump = ref(false);
+const isInteractionLocked = ref(false);
 
 // --- Win/Game Over State ---
 const showWinnerAnimation = ref(false);
@@ -39,6 +41,7 @@ const winnerName = ref('');
 interface FlyingCard {
   id: number;
   style: any;
+  cardCode?: string;
 }
 const flyingCards = ref<FlyingCard[]>([]);
 let nextFlyingId = 0;
@@ -46,22 +49,17 @@ let nextFlyingId = 0;
 // Filter opponents (Everyone except me)
 const opponents = computed(() => players.value.filter(p => p !== playerId.value));
 
-// --- Positioning Logic (Full Circle Spread) ---
-// We expose this so we can reuse the logic for animations
+// --- Positioning Logic ---
 const getOpponentCoords = (index: number, total: number) => {
-  if (total === 1) return { top: 0, left: 50 }; // percentages
+  if (total === 1) return { top: 0, left: 50 };
 
-  // Spread from 135deg (Bottom-Left) to 405deg (Bottom-Right)
   const startAngle = 135;
   const endAngle = 405;
   const range = endAngle - startAngle;
-
   const step = range / (total + 1);
   const angle = startAngle + (step * (index + 1));
   const rad = (angle * Math.PI) / 180;
-
-  const radius = 53; // distance from center %
-
+  const radius = 53;
   const left = 50 + (radius * Math.cos(rad));
   const top = 50 + (radius * Math.sin(rad));
 
@@ -77,35 +75,85 @@ const getOpponentStyle = (index: number, total: number) => {
   };
 };
 
-// --- Enhanced Card Style Logic ---
+// --- SMART TURN ARROW LOGIC ---
+const currentRotation = ref(0); // Persistent rotation value
+const tempArrowTargetId = ref<string | null>(null); // For animations (like pointing at skipped player)
+
+// Helper to get the target static angle for any player ID
+const getAngleForPlayer = (targetId: string) => {
+  if (targetId === playerId.value) return 0; // My angle
+
+  const totalOpponents = opponents.value.length;
+  const index = opponents.value.indexOf(targetId);
+
+  if (index === -1) return 0; // Fallback
+
+  if (totalOpponents === 1) return 180;
+
+  const startAngle = 135;
+  const startRange = 135; // We use startAngle logic from positioning
+  const endAngle = 405;
+  const range = endAngle - startRange;
+  const step = range / (totalOpponents + 1);
+  const angle = startAngle + (step * (index + 1));
+
+  return angle - 90; // Adjust for arrow orientation
+};
+
+// Watch for turn changes OR temp target overrides (Skip animation)
+watch([currentPlayerId, tempArrowTargetId], ([newCurrent, newTemp]) => {
+  const targetId = newTemp || newCurrent;
+
+  if (!targetId) return;
+
+  const targetAngle = getAngleForPlayer(targetId);
+  const currentNormalized = currentRotation.value % 360;
+  let diff = targetAngle - currentNormalized;
+
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+
+  const gameDir = direction.value;
+
+  if (gameDir === 1 && diff < 0) {
+    diff += 360;
+  } else if (gameDir === -1 && diff > 0) {
+    diff -= 360;
+  }
+
+  currentRotation.value += diff;
+});
+
+// Initialize rotation on mount
+onMounted(() => {
+  if (currentPlayerId.value) {
+    currentRotation.value = getAngleForPlayer(currentPlayerId.value);
+  }
+});
+
+// --- Card Style Logic ---
 const getCardMeta = (cardCode: string) => {
   if (!cardCode) return { bg: '#cbd5e1', label: '?', isWild: false, color: '#64748b' };
 
   const [colorCode, val] = cardCode.split('-');
-
-  // Standard Uno Colors
   const colors: Record<string, string> = {
-    'R': '#ef4444', // Red
-    'B': '#3b82f6', // Blue
-    'G': '#22c55e', // Green
-    'Y': '#eab308', // Yellow
-    'W': '#0f172a'  // Wild (Dark Slate/Black)
+    'R': '#ef4444', 'B': '#3b82f6', 'G': '#22c55e', 'Y': '#eab308', 'W': '#0f172a'
   };
 
   let label = val;
   let isWild = false;
 
-  if (val === 'S') label = '⊘';      // Skip
-  else if (val === 'R') label = '⇄'; // Reverse
-  else if (val === 'D2') label = '+2'; // Draw 2
-  else if (val === 'Wild') { label = '★'; isWild = true; } // Wild Star
-  else if (val === 'W4') { label = '+4'; isWild = true; } // Wild Draw 4
+  if (val === 'S') label = '⊘';
+  else if (val === 'R') label = '⇄';
+  else if (val === 'D2') label = '+2';
+  else if (val === 'Wild') { label = '★'; isWild = true; }
+  else if (val === 'W4') { label = '+4'; isWild = true; }
 
   return {
     bg: colors[colorCode] || '#94a3b8',
     label: label,
     isWild: isWild,
-    color: 'white' // Text color
+    color: 'white'
   };
 };
 
@@ -119,30 +167,33 @@ const getActiveColorHex = computed(() => {
   }
 });
 
-// --- Game Logic: Playable Check ---
+// --- Game Logic ---
 const isCardPlayable = (card: string) => {
   if (!topCard.value) return false;
-
   const [cColor, cValue] = card.split('-');
   const [tColor, tValue] = topCard.value.split('-');
 
   if (cColor === 'W') return true;
-
   const targetColor = currentActiveColor.value || tColor;
   if (cColor === targetColor) return true;
-
   return cValue === tValue;
 };
 
+// --- Handlers ---
 const handleCardClick = (card: string) => {
-  if (isMyTurn.value && isCardPlayable(card)) {
+  if (isMyTurn.value && isCardPlayable(card) && !isInteractionLocked.value) {
+    isInteractionLocked.value = true;
+    triggerSelfPlayAnimation(card);
     playCard(card);
+    setTimeout(() => { isInteractionLocked.value = false }, 1000);
   }
 };
 
 const handleDrawClick = () => {
-  if (isMyTurn.value) {
+  if (isMyTurn.value && !isInteractionLocked.value) {
+    isInteractionLocked.value = true;
     drawCard();
+    setTimeout(() => { isInteractionLocked.value = false; }, 1000);
   }
 };
 
@@ -153,7 +204,6 @@ const handleColorSelect = (color: string) => {
   wildCardIsDraw4.value = false;
 };
 
-// --- Navigation Handlers ---
 const handleBackToLobby = () => {
   backToLobby();
   gameState.value = 'LOBBY';
@@ -164,17 +214,22 @@ const handleLeave = () => {
 };
 
 // --- ANIMATION CONTROLLER ---
-const createFlyingCard = (start: any, end: any, delay: number = 0) => {
+const triggerPileImpact = () => {
+  setTimeout(() => {
+    discardPileBump.value = true;
+    setTimeout(() => { discardPileBump.value = false; }, 200);
+  }, 600);
+};
+
+const createFlyingCard = (start: any, end: any, delay: number = 0, cardCode?: string) => {
   setTimeout(() => {
     const id = nextFlyingId++;
-
-    // Initial State
     flyingCards.value.push({
       id,
-      style: { ...start, transition: 'none' }
+      style: { ...start, transition: 'none' },
+      cardCode
     });
 
-    // Animate to End State
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const card = flyingCards.value.find(c => c.id === id);
@@ -187,7 +242,6 @@ const createFlyingCard = (start: any, end: any, delay: number = 0) => {
       });
     });
 
-    // Cleanup
     setTimeout(() => {
       flyingCards.value = flyingCards.value.filter(c => c.id !== id);
     }, 700 + delay);
@@ -195,35 +249,24 @@ const createFlyingCard = (start: any, end: any, delay: number = 0) => {
 };
 
 const triggerDrawAnimation = (targetPlayerId: string, count: number) => {
-
-  // 1. Determine End Destination (Me or Opponent)
   let endStyle: any;
 
   if (targetPlayerId === playerId.value) {
-    // DESTINATION: ME (Bottom Center)
     endStyle = {
-      top: '90%',
-      left: '50%',
-      opacity: 0,
+      top: '90%', left: '50%', opacity: 0,
       transform: `translate(-50%, -50%) scale(1) rotate(${Math.random() * 20 - 10}deg)`
     };
   } else {
-    // DESTINATION: OPPONENT (Their Seat)
     const index = opponents.value.indexOf(targetPlayerId);
-    if (index === -1) return; // Should not happen
-
+    if (index === -1) return;
     const { left, top } = getOpponentCoords(index, opponents.value.length);
     endStyle = {
-      top: `${top}%`,
-      left: `${left}%`,
-      opacity: 0,
+      top: `${top}%`, left: `${left}%`, opacity: 0,
       transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)'
     };
   }
 
-  // 2. Loop through cards
   for (let i = 0; i < count; i++) {
-    // START: Always the Deck (Center)
     createFlyingCard(
       {
         top: '45%', left: '50%', opacity: 1,
@@ -238,28 +281,40 @@ const triggerDrawAnimation = (targetPlayerId: string, count: number) => {
 const triggerOpponentPlayAnimation = (playerId: string) => {
   const index = opponents.value.indexOf(playerId);
   if (index === -1) return;
-
   const { left, top } = getOpponentCoords(index, opponents.value.length);
 
   createFlyingCard(
     {
-      top: `${top}%`,
-      left: `${left}%`,
-      opacity: 1,
+      top: `${top}%`, left: `${left}%`, opacity: 1,
       transform: 'translate(-50%, -50%) scale(0.5) rotate(0deg)'
     },
     {
-      top: '50%', // Center (Discard Pile)
-      left: '50%',
-      opacity: 0, // Fade out as it hits the pile
+      top: '50%', left: '50%', opacity: 0,
       transform: 'translate(-50%, -50%) scale(1) rotate(0deg)'
-    }
+    },
   );
+  triggerPileImpact();
 };
 
-watch(event, (newEvent) => {
-  console.log("NEW EVENT: ", newEvent);
+const triggerSelfPlayAnimation = (cardCode: string) => {
+  createFlyingCard(
+    {
+      top: '85%', left: '50%', opacity: 1,
+      transform: 'translate(-50%, -50%) scale(1.1) rotate(0deg)',
+      zIndex: 100
+    },
+    {
+      top: '50%', left: '50%', opacity: 0,
+      transform: 'translate(-50%, -50%) scale(1) rotate(0deg)'
+    },
+    0,
+    cardCode
+  );
+  triggerPileImpact();
+};
 
+// --- Event Watcher ---
+watch(event, (newEvent) => {
   const eventType = newEvent.type;
   const originPlayerId = newEvent.player_id;
   const affectedPlayerId = newEvent.affected_player_id;
@@ -268,20 +323,32 @@ watch(event, (newEvent) => {
     if (originPlayerId !== playerId.value) {
       triggerOpponentPlayAnimation(originPlayerId);
     }
-
   } else if (eventType === 'reverse') {
     showReverseAnimation.value = true;
     setTimeout(() => { showReverseAnimation.value = false; }, 2000);
 
   } else if (eventType === 'skip') {
-    // Set skipped player to show the X overlay
     if (affectedPlayerId) {
+      // 1. Force arrow to point at the victim (Detour)
+      tempArrowTargetId.value = affectedPlayerId;
+
+      // 2. Show the Skip Icon
       skippedPlayerId.value = affectedPlayerId;
+
+      // 3. Lock interaction if it's me
+      if (affectedPlayerId === playerId.value) {
+         isInteractionLocked.value = true;
+      }
+
+      // 4. Release after Reduced Delay (1.2s instead of 2.0s)
       setTimeout(() => {
-        if (skippedPlayerId.value === affectedPlayerId) {
-          skippedPlayerId.value = null;
+        tempArrowTargetId.value = null;
+        skippedPlayerId.value = null;
+
+        if (affectedPlayerId === playerId.value) {
+          isInteractionLocked.value = false;
         }
-      }, 2000);
+      }, 1200);
     }
 
   } else if (eventType === 'wild_color_pick') {
@@ -295,11 +362,14 @@ watch(event, (newEvent) => {
 
   } else if (eventType === 'draw4' || eventType === 'draw2') {
     const count: number = eventType === 'draw4' ? 4 : 2;
-    // Animate for ANY affected player (Me or Opponent)
     triggerDrawAnimation(affectedPlayerId, count);
+    if (affectedPlayerId === playerId.value) {
+      isInteractionLocked.value = true;
+      const totalAnimTime = (count * 250) + 700;
+      setTimeout(() => { isInteractionLocked.value = false; }, totalAnimTime);
+    }
 
   } else if (eventType === 'draw_card') {
-    // Animate regular draws for ANY player
     triggerDrawAnimation(originPlayerId, 1);
 
   } else if (eventType === 'win') {
@@ -346,7 +416,18 @@ watch(event, (newEvent) => {
         class="flying-card-visual"
         :style="card.style"
       >
-        <div class="playing-card card-back">
+        <div
+          v-if="card.cardCode"
+          class="playing-card face-up"
+          :style="{ backgroundColor: getCardMeta(card.cardCode).bg }"
+        >
+          <div v-if="getCardMeta(card.cardCode).isWild" class="wild-bg"></div>
+          <span class="corner-label top-left">{{ getCardMeta(card.cardCode).label }}</span>
+          <span class="corner-label bottom-right">{{ getCardMeta(card.cardCode).label }}</span>
+          <span class="card-value">{{ getCardMeta(card.cardCode).label }}</span>
+        </div>
+
+        <div v-else class="playing-card card-back">
           <span class="inner-logo">UNO</span>
         </div>
       </div>
@@ -367,9 +448,18 @@ watch(event, (newEvent) => {
     <div class="table-surface">
 
       <div
-        class="direction-ring"
-        :class="{ 'counter-clockwise': direction === -1 }"
+        class="turn-dial-track"
+        :class="{ 'is-my-turn-track': isMyTurn }"
+        :style="{ transform: `translate(-50%, -50%) rotate(${currentRotation}deg)` }"
       >
+        <div class="turn-arrow-container">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="turn-arrow-svg">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25 12 21m0 0-3.75-3.75M12 21V3" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="direction-ring" :class="{ 'counter-clockwise': direction === -1 }">
         <svg viewBox="0 0 100 100" class="arrow-svg">
           <defs>
             <symbol id="icon-left" viewBox="0 0 24 24">
@@ -379,19 +469,8 @@ watch(event, (newEvent) => {
               <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
             </symbol>
           </defs>
-
-          <g
-            v-for="i in 8"
-            :key="i"
-            :transform="`rotate(${(i - 1) * 45}, 50, 50)`"
-          >
-            <use
-              :href="direction === 1 ? '#icon-right' : '#icon-left'"
-              x="46"
-              y="6"
-              width="8"
-              height="8"
-            />
+          <g v-for="i in 4" :key="i" :transform="`rotate(${(i - 1) * 90}, 50, 50)`">
+            <use :href="direction === 1 ? '#icon-right' : '#icon-left'" x="46" y="6" width="8" height="8" />
           </g>
         </svg>
       </div>
@@ -400,7 +479,7 @@ watch(event, (newEvent) => {
 
         <div
           class="card-pile draw-pile"
-          :class="{ 'disabled-pile': !isMyTurn }"
+          :class="{ 'disabled-pile': !isMyTurn || isInteractionLocked }"
           @click="handleDrawClick"
         >
           <div class="playing-card card-back">
@@ -408,7 +487,10 @@ watch(event, (newEvent) => {
           </div>
         </div>
 
-        <div class="card-pile discard-pile">
+        <div
+          class="card-pile discard-pile"
+          :class="{ 'bump-effect': discardPileBump }"
+        >
           <div
              class="active-color-glow"
              :style="{ borderColor: getActiveColorHex, boxShadow: `0 0 30px ${getActiveColorHex}` }"
@@ -440,14 +522,11 @@ watch(event, (newEvent) => {
           <div class="avatar-group">
             <div class="avatar-circle">
               {{ playerNames[opId]?.charAt(0).toUpperCase() }}
-
-              <!-- Skip Overlay for Opponents -->
               <div v-if="skippedPlayerId === opId" class="skip-badge">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="skip-icon">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
                 </svg>
               </div>
-
             </div>
             <span class="op-name">{{ playerNames[opId] }}</span>
           </div>
@@ -465,19 +544,14 @@ watch(event, (newEvent) => {
 
     </div>
 
-    <!-- Self Skip Notification (Optional visual for when YOU are skipped) -->
     <Transition name="fade">
       <div v-if="skippedPlayerId === playerId" class="self-skip-alert">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="skip-icon-large">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="skip-icon-large">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
         </svg>
         <span>SKIPPED!</span>
       </div>
     </Transition>
-
-    <div class="turn-banner" :class="{ 'my-turn': isMyTurn }">
-      {{ isMyTurn ? "YOUR TURN" : `${playerNames[currentPlayerId] || 'Someone'}'s Turn` }}
-    </div>
 
     <div class="my-hand-container">
       <div class="hand-scroll">
@@ -486,8 +560,8 @@ watch(event, (newEvent) => {
           :key="`${card}-${index}`"
           class="playing-card hand-card"
           :class="{
-            'playable': isMyTurn && isCardPlayable(card),
-            'unplayable': !(isMyTurn && isCardPlayable(card))
+            'playable': isMyTurn && isCardPlayable(card) && !isInteractionLocked,
+            'unplayable': !(isMyTurn && isCardPlayable(card) && !isInteractionLocked)
           }"
           :style="{ backgroundColor: getCardMeta(card).bg }"
           @click="handleCardClick(card)"
@@ -504,6 +578,60 @@ watch(event, (newEvent) => {
 </template>
 
 <style scoped>
+.bump-effect { animation: bump 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+@keyframes bump { 0% { transform: scale(1); } 50% { transform: scale(0.9); } 100% { transform: scale(1); } }
+
+/* --- REVISED TURN DIAL STYLES --- */
+.turn-dial-track {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 440px; /* Increased Orbit Diameter to clear cards */
+  height: 440px;
+  pointer-events: none;
+  z-index: 1; /* Below cards (cards are z-index 10 in center-area) */
+  border: 2px dashed rgba(255, 255, 255, 0.1); /* Visible Track */
+  border-radius: 50%;
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s;
+}
+
+/* Container to position the arrow on the edge of the circle */
+.turn-arrow-container {
+  position: absolute;
+  bottom: -15px; /* Sits on the bottom edge */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.turn-arrow-svg {
+  width: 50px; /* Bolder size */
+  height: 50px;
+  color: #64748b; /* Inactive color */
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+  transition: all 0.3s ease;
+}
+
+/* My Turn State: Green, Pulse, Larger */
+.turn-dial-track.is-my-turn-track {
+  border-color: rgba(34, 197, 94, 0.3); /* Track glows slightly */
+  animation: pulse-ring 2s infinite;
+}
+
+.turn-dial-track.is-my-turn-track .turn-arrow-svg {
+  color: #22c55e;
+  transform: scale(1.4); /* Bigger */
+  filter: drop-shadow(0 0 15px #22c55e);
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  70% { box-shadow: 0 0 0 20px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
 .action-btn { border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: bold; padding: 12px 24px; transition: transform 0.1s; width: 100%; }
 .action-btn:active { transform: scale(0.95); }
 .action-btn.primary { background: #22c55e; color: white; margin-bottom: 10px; }
@@ -514,7 +642,7 @@ watch(event, (newEvent) => {
 .avatar-group { align-items: center; background: rgba(15, 23, 42, 0.8); border-radius: 12px; display: flex; flex-direction: column; padding: 5px; z-index: 5; }
 .blue { background-color: #3b82f6; color: #3b82f6; }
 .bottom-right { bottom: 6px; right: 8px; transform: rotate(180deg); }
-.card-pile { position: relative; }
+.card-pile { position: relative; transition: transform 0.1s; }
 .card-placeholder { border: 2px dashed rgba(255,255,255,0.2); border-radius: 12px; height: 140px; width: 100px; }
 .card-value { color: white; font-size: 3rem; font-weight: 800; text-shadow: 2px 2px 0px rgba(0,0,0,0.2); z-index: 2; }
 .center-area { display: flex; gap: 30px; z-index: 10; }
@@ -538,7 +666,7 @@ watch(event, (newEvent) => {
 .hand-card { margin-right: -50px; }
 .hand-card.playable { cursor: pointer; }
 .hand-card.playable:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-right: 0px; transform: translateY(-40px) scale(1.1) rotate(2deg); z-index: 50; }
-.hand-card.unplayable { cursor: not-allowed; filter: grayscale(0.8) brightness(0.7); opacity: 0.8; transform: scale(0.95); }
+.hand-card.unplayable { cursor: not-allowed; filter: grayscale(0.8) brightness(0.7); opacity: 0.8; transform: scale(0.95); pointer-events: none; }
 .hand-card:last-child { margin-right: 0; }
 .hand-scroll { display: flex; margin-left: 20px; padding: 0 40px; }
 .inner-logo { color: #ef4444; font-size: 1.5rem; font-weight: 900; transform: rotate(-5deg); z-index: 5; }
@@ -570,8 +698,6 @@ watch(event, (newEvent) => {
 .skip-icon-large { width: 64px; height: 64px; stroke-width: 2.5; }
 .table-surface { align-items: center; background: radial-gradient(circle, #334155 0%, #1e293b 70%); border-radius: 50%; box-shadow: 0 0 50px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.2); display: flex; height: 70vh; justify-content: center; left: 50%; position: absolute; top: 45%; transform: translate(-50%, -50%); width: 70vh; }
 .top-left { left: 8px; top: 6px; }
-.turn-banner { backdrop-filter: blur(4px); background: rgba(0,0,0,0.5); border-radius: 20px; bottom: 220px; color: #94a3b8; font-size: 1rem; font-weight: bold; left: 50%; padding: 8px 24px; pointer-events: none; position: absolute; transform: translateX(-50%); transition: all 0.3s; }
-.turn-banner.my-turn { background: #22c55e; box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); color: white; transform: translateX(-50%) scale(1.1); }
 .wild-bg { background: conic-gradient(#ef4444 0deg 90deg, #3b82f6 90deg 180deg, #eab308 180deg 270deg, #22c55e 270deg 360deg); border-radius: 50%; filter: blur(8px); height: 80px; opacity: 0.8; position: absolute; width: 80px; z-index: 1; }
 .winner-overlay { align-items: center; animation: zoom-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); background: rgba(0,0,0,0.8); bottom: 0; color: #facc15; display: flex; flex-direction: column; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 1000; }
 .winner-text { font-size: 4rem; font-weight: 900; letter-spacing: 4px; text-shadow: 0 0 20px rgba(250, 204, 21, 0.5); text-transform: uppercase; }
@@ -582,7 +708,13 @@ watch(event, (newEvent) => {
 @keyframes rotate-ccw { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
 @keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes zoom-in { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
-@keyframes bounce-in { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
+
+/* FIXED KEYFRAMES to include translate(-50%, -50%) at every step */
+@keyframes bounce-in {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  60% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
 
 @media (max-width: 600px) {
   .card-placeholder { height: 120px; width: 80px; }
