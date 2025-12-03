@@ -293,7 +293,12 @@ class GameManager:
 
         elif action == "play_card":
             current_player_id = players[current_player_index]
-            if current_player_id != player_id or card is None: return game
+
+            if (
+                    current_player_id != player_id
+                    or card is None
+                    or card not in game.player_cards[current_player_id]
+            ): return game
 
             card_color, card_value = retrieve_card_info(card)
             top_card = game.discard_pile[-1]
