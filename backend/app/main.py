@@ -111,7 +111,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                         "message": f"Room {new_game_id} created."
                     }
                     await broadcast_to_room(new_game_id, response)
-                    await broadcast_lobby_state()
 
                 elif action == "join_game":
                     target_id = payload.get("game_id", "").upper()
@@ -132,7 +131,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                         "player_states": game_state.player_states
                     }
                     await broadcast_to_room(target_id, response)
-                    await broadcast_lobby_state()
 
                 elif action == "leave_game":
                     if current_game_id:
@@ -144,8 +142,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                             "player_name": client_display_name,
                             "message": f"{client_display_name} left the game."
                         })
-
-                        await broadcast_lobby_state()
                         current_game_id = None
 
                 elif action == "start_game":
