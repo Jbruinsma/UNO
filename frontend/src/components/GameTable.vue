@@ -22,7 +22,7 @@ const {
   event,
   endGame,
   backToLobby,
-  isConnected // Added connection state
+  isConnected
 } = useGameWebSocket();
 
 // --- Local State ---
@@ -374,15 +374,29 @@ watch(event, (newEvent) => {
     triggerDrawAnimation(originPlayerId, 1);
 
   } else if (eventType === 'win') {
-    winnerName.value = playerNames.value[originPlayerId] || 'Player';
-    showWinnerAnimation.value = true;
-    endGame();
-    setTimeout(() => {
+    triggerWin(playerNames.value[originPlayerId] || 'Player');
+  }
+});
+
+watch(() => players.value.length, async (newCount) => {
+
+  if (newCount <= 1) {
+    await triggerWin(playerNames.value[playerId.value]);
+    return
+  }
+
+});
+
+async function triggerWin(winningPlayerName: string){
+  winnerName.value = winningPlayerName;
+  showWinnerAnimation.value = true;
+  endGame()
+  setTimeout(() => {
       showWinnerAnimation.value = false;
       showGameOverModal.value = true;
     }, 3000);
-  }
-});
+}
+
 </script>
 
 <template>
