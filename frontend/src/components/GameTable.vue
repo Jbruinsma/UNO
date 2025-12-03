@@ -21,7 +21,8 @@ const {
   otherPlayerCardCounts,
   event,
   endGame,
-  backToLobby
+  backToLobby,
+  isConnected // Added connection state
 } = useGameWebSocket();
 
 // --- Local State ---
@@ -181,7 +182,7 @@ const isCardPlayable = (card: string) => {
 
 // --- Handlers ---
 const handleCardClick = (card: string) => {
-  if (isMyTurn.value && isCardPlayable(card) && !isInteractionLocked.value) {
+  if (isMyTurn.value && isCardPlayable(card) && !isInteractionLocked.value && isConnected.value) {
     isInteractionLocked.value = true;
     triggerSelfPlayAnimation(card);
     playCard(card);
@@ -190,7 +191,7 @@ const handleCardClick = (card: string) => {
 };
 
 const handleDrawClick = () => {
-  if (isMyTurn.value && !isInteractionLocked.value) {
+  if (isMyTurn.value && !isInteractionLocked.value && isConnected.value) {
     isInteractionLocked.value = true;
     drawCard();
     setTimeout(() => { isInteractionLocked.value = false; }, 1000);
@@ -387,6 +388,10 @@ watch(event, (newEvent) => {
 <template>
   <div class="game-container">
 
+    <div v-if="!isConnected" class="connection-warning">
+      Trying to reconnect...
+    </div>
+
     <div v-if="showWinnerAnimation" class="winner-overlay">
       <div class="crown-icon">👑</div>
       <div class="winner-text">{{ winnerName }} WINS!</div>
@@ -479,7 +484,7 @@ watch(event, (newEvent) => {
 
         <div
           class="card-pile draw-pile"
-          :class="{ 'disabled-pile': !isMyTurn || isInteractionLocked }"
+          :class="{ 'disabled-pile': !isMyTurn || isInteractionLocked || !isConnected }"
           @click="handleDrawClick"
         >
           <div class="playing-card card-back">
@@ -560,8 +565,8 @@ watch(event, (newEvent) => {
           :key="`${card}-${index}`"
           class="playing-card hand-card"
           :class="{
-            'playable': isMyTurn && isCardPlayable(card) && !isInteractionLocked,
-            'unplayable': !(isMyTurn && isCardPlayable(card) && !isInteractionLocked)
+            'playable': isMyTurn && isCardPlayable(card) && !isInteractionLocked && isConnected,
+            'unplayable': !(isMyTurn && isCardPlayable(card) && !isInteractionLocked && isConnected)
           }"
           :style="{ backgroundColor: getCardMeta(card).bg }"
           @click="handleCardClick(card)"
@@ -650,6 +655,7 @@ watch(event, (newEvent) => {
 .color-btn:active { transform: scale(0.95); }
 .color-btn:hover { filter: brightness(1.2); transform: scale(1.05); }
 .color-grid { display: grid; gap: 15px; grid-template-columns: 1fr 1fr; margin-top: 25px; }
+.connection-warning { background: #facc15; color: #854d0e; font-weight: bold; padding: 10px; position: fixed; text-align: center; top: 0; width: 100%; z-index: 2000; }
 .corner-label { color: white; font-size: 0.9rem; font-weight: 800; position: absolute; text-shadow: 1px 1px 0 rgba(0,0,0,0.3); z-index: 2; }
 .crown-icon { animation: bounce 1s infinite; font-size: 8rem; margin-bottom: 20px; }
 .direction-ring { animation: rotate-cw 20s linear infinite; height: 100%; opacity: 0.15; pointer-events: none; position: absolute; width: 100%; }
