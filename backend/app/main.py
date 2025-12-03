@@ -4,6 +4,8 @@ import string
 from typing import Optional, List, Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from starlette.middleware.cors import CORSMiddleware
+
 # Preserving your relative imports
 from .connection_manager import ConnectionManager
 from .game_manager import GameManager
@@ -13,6 +15,14 @@ from .pydantic_models.game_state import GameState
 app = FastAPI()
 connection_manager = ConnectionManager()
 game_manager = GameManager()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def generate_game_id(length: int =4) -> str:

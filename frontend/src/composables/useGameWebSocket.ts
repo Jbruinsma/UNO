@@ -42,10 +42,11 @@ export function useGameWebSocket() {
     playerName.value = displayName;
 
     const safeName = encodeURIComponent(displayName);
-    socket.value = new WebSocket(
-      `ws://localhost:8000/ws/${playerId.value}/${safeName}`,
-    );
+    const hostname = window.location.hostname;
+    const socketUrl = `ws://${hostname}:8000/ws/${playerId.value}/${safeName}`;
 
+    console.log(`Connecting to: ${socketUrl}`);
+    socket.value = new WebSocket(socketUrl);
     socket.value.onopen = () => {
       isConnected.value = true;
       currentError.value = null;
@@ -57,7 +58,7 @@ export function useGameWebSocket() {
         handleMessage(data);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
-        console.log("Raw message:", event.data);
+        // console.log("Raw message:", event.data);
       }
     };
 
@@ -79,7 +80,7 @@ export function useGameWebSocket() {
 
   const handleMessage = (data: any) => {
 
-    console.log("Handling message:", data);
+    // console.log("Handling message:", data);
 
     switch (data.event) {
 
