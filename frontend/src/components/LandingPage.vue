@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket.ts';
+import { Filter } from 'bad-words';
 
 const {
   initConnection,
@@ -11,6 +12,9 @@ const {
   currentError,
   playerName //
 } = useGameWebSocket();
+
+const filter = new Filter();
+const nameError = ref('');
 
 const joinInput = ref('');
 const displayName = ref('');
@@ -32,6 +36,7 @@ onMounted(() => {
 });
 
 const handleNameInput = () => {
+  nameError.value = '';
   if (confirmedName.value && displayName.value === confirmedName.value) {
     isNameConfirmed.value = true;
     initConnection(displayName.value);
@@ -42,11 +47,28 @@ const handleNameInput = () => {
 };
 
 const confirmName = () => {
-  if (displayName.value.trim().length > 0) {
-    confirmedName.value = displayName.value;
-    isNameConfirmed.value = true;
-    initConnection(displayName.value);
+  const rawName = displayName.value.trim();
+
+  if (rawName.length < 3 || rawName.length > 15) {
+    nameError.value = "Name must be between 3 and 12 characters.";
+    return;
   }
+
+  const validCharPattern = /^[a-zA-Z0-9 ]+$/;
+  if (!validCharPattern.test(rawName)) {
+    nameError.value = "Please use letters and numbers only.";
+    return;
+  }
+
+  if (filter.isProfane(rawName)) {
+    nameError.value = "That name is not allowed.";
+    return;
+  }
+
+  nameError.value = '';
+  confirmedName.value = rawName;
+  isNameConfirmed.value = true;
+  initConnection(rawName);
 };
 
 const handleCreate = () => {
@@ -100,7 +122,7 @@ const handleJoin = () => {
             :class="{ 'is-confirmed': isNameConfirmed }"
             title="Confirm Name"
           >
-            <svg v-if="isNameConfirmed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="status-icon success">
+            <svg v-if="isNameConfirmed && isConnected" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="status-icon success">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
 
@@ -109,9 +131,14 @@ const handleJoin = () => {
             </svg>
           </button>
         </div>
+
+        <div v-if="nameError" class="error-banner">
+          {{ nameError }}
+        </div>
+
       </div>
 
-      <div class="actions">
+      <div v-if="isNameConfirmed && isConnected" class="actions">
         <div class="action-card create">
           <h2>Start Fresh</h2>
           <p>Create a new room and invite friends.</p>
@@ -383,6 +410,7 @@ const handleJoin = () => {
 }
 
 .error-banner {
+  text-align: center;
   background: #fee2e2;
   color: #991b1b;
   padding: 12px;
