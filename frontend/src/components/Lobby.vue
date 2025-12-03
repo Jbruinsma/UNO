@@ -30,7 +30,7 @@ const getInitials = (name: string) => {
 };
 
 const allPlayersReady = computed(() => {
-  if (players.value.length === 0) return false;
+  if (players.value.length < 2) return false;
   return players.value.every(pId => playerStates.value[pId] === 'ready');
 });
 
@@ -115,7 +115,7 @@ const getStatusLabel = (pId: string) => {
             <div class="mini-spinner"></div>
           </div>
 
-          <div v-if="isHost && !allPlayersReady" class="waiting-warning">
+          <div v-if="isHost && !allPlayersReady && players.length >= 2" class="waiting-warning">
             Wait for everyone to finish...
           </div>
 
@@ -148,7 +148,7 @@ const getStatusLabel = (pId: string) => {
 .connection-warning { background: #facc15; color: #854d0e; font-weight: bold; padding: 10px; position: fixed; text-align: center; top: 0; width: 100%; z-index: 2000; }
 .copy-icon { color: #38bdf8; font-size: 1.2rem; }
 .copy-notification { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 12px 24px; border-radius: 50px; display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); z-index: 100; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
-.crown-icon { background: #facc15; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); color: #854d0e; font-size: 1.2rem; height: 28px; padding: 4px; position: absolute; right: -10px; text-align: center; top: -10px; transform: rotate(15deg); width: 28px; z-index: 10; }
+.crown-icon { background: #1e293b; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); color: #854d0e; font-size: 1.2rem; height: 28px; padding: 4px; position: absolute; right: -10px; text-align: center; top: -10px; transform: rotate(15deg); width: 28px; z-index: 10; }
 .header-content h2 { color: #0f172a; font-size: 1.5rem; font-weight: 800; margin: 0; }
 .icon-check { color: #4ade80; font-size: 1.2rem; }
 .is-host .avatar { border: 3px solid #facc15; }

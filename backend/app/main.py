@@ -15,7 +15,7 @@ connection_manager = ConnectionManager()
 game_manager = GameManager()
 
 
-def generate_game_id(length=4):
+def generate_game_id(length: int =4) -> str:
     """
     Generate a random 4-letter room ID (e.g., 'ABCD')
     """
@@ -23,13 +23,13 @@ def generate_game_id(length=4):
     return ''.join(random.choices(string.ascii_uppercase, k=length))
 
 
-async def broadcast_lobby_state():
+async def broadcast_lobby_state() -> None:
     """
     Sends the current list of available games to EVERYONE connected.
     Useful for updating the 'Join Game' screen for users not yet in a game.
     """
 
-    lobby_data = game_manager.get_lobby_info()
+    lobby_data: List[Dict] = game_manager.get_lobby_info()
     message = {
         "event": "lobby_update",
         "games": lobby_data
@@ -37,7 +37,7 @@ async def broadcast_lobby_state():
     await connection_manager.broadcast(json.dumps(message))
 
 
-async def broadcast_to_room(game_id: str, message: dict):
+async def broadcast_to_room(game_id: str, message: Dict) -> None:
     """
     Helper to send a message ONLY to players in a specific room.
     """
@@ -50,7 +50,7 @@ async def broadcast_to_room(game_id: str, message: dict):
 
 
 @app.get("/")
-async def root():
+async def root() -> Dict[str, str]:
     """
     Basic health check endpoint.
     """
@@ -59,7 +59,7 @@ async def root():
 
 
 @app.websocket("/ws/{client_id}/{client_display_name}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str, client_display_name: str):
+async def websocket_endpoint(websocket: WebSocket, client_id: str, client_display_name: str) -> None:
     """
     Main WebSocket endpoint. Handles all incoming messages from clients and handles game logic.
     """
@@ -150,8 +150,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
 
                 elif action == "start_game":
                     if current_game_id:
-                        game_state = game_manager.start_game(current_game_id)
-                        await send_game_update(game_state, current_game_id, "game_started")
+                        game_state: Optional[Game] = game_manager.start_game(current_game_id)
+                        if game_state:
+                            await send_game_update(game_state, current_game_id, "game_started")
 
                 elif action == "end_game":
                     if current_game_id:
@@ -159,7 +160,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
 
                 elif action == "back_to_lobby":
                     if current_game_id:
-                        game_state = game_manager.set_player_back_to_lobby(current_game_id, client_id)
+                        game_state: Optional[Game] = game_manager.set_player_back_to_lobby(current_game_id, client_id)
                         if game_state:
                             await broadcast_to_room(current_game_id, {
                                 "event": "player_back_to_lobby",
@@ -172,7 +173,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                         card: Optional[str] = extra.get("card") if extra else None
                         advance_turn: bool = extra.get("advance_turn", True)
 
-                        game_state = game_manager.process_turn(client_id, current_game_id, turn_action, card, advance_turn)
+                        game_state: Optional[Game] = game_manager.process_turn(client_id, current_game_id, turn_action, card, advance_turn)
                         if game_state:
                             await send_game_update(game_state, current_game_id)
 
@@ -199,7 +200,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                 }), client_id)
 
     except WebSocketDisconnect:
-        user_left_id = await connection_manager.disconnect(websocket)
+        user_left_id: Optional[str] = await connection_manager.disconnect(websocket)
 
         if current_game_id and user_left_id:
             game_manager.remove_player(current_game_id, user_left_id)
@@ -210,7 +211,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                 "player_name": client_display_name,
                 "message": f"{client_display_name} disconnected unexpectedly."
             })
-            await broadcast_lobby_state()
 
 
 async def send_game_update(game_state: Game, current_game_id: str, event: str = "game_update") -> None:
@@ -231,7 +231,6 @@ async def send_game_update(game_state: Game, current_game_id: str, event: str = 
             game_id=current_game_id,
             current_active_color=game_state.current_active_color,
             direction=game_state.direction,
-            # Handle empty discard pile case
             top_card=game_state.discard_pile[-1] if game_state.discard_pile else None,
             current_player=current_player_id,
             hand=player_cards.get(player_id, []),
@@ -244,7 +243,6 @@ async def send_game_update(game_state: Game, current_game_id: str, event: str = 
             player_states=game_state.player_states
         )
 
-        # Serialize and send
         await connection_manager.send_personal_message(
             game_update_json.model_dump_json(),
             player_id
