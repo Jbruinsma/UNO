@@ -406,4 +406,18 @@ class GameManager:
             self.set_event(game_id, "draw4", player_id_initiator, victim_id)
             return game
 
+        elif action == "force_skip":
+            game.player_skips[player_id] += 1
+
+            if game.game_settings.kick_after_max_strikes and game.player_skips[player_id] >= game.game_settings.max_afk_strikes:
+                self.remove_player(game_id, player_id)
+                self.advance_turn(game_id)
+                return game
+
+            if game.game_settings.afk_behavior == AFKBehavior.DRAW_AND_SKIP:
+                print("DRAW AND SKIP (IMPLEMENT LATER)")
+
+            self.advance_turn(game_id)
+            return game
+
         return game

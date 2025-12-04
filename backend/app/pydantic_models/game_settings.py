@@ -14,7 +14,7 @@ class AFKBehavior(str, Enum):
     """What happens when the timer runs out?"""
 
     DRAW_AND_SKIP = "draw_skip"  # Auto-draw penalty and next turn
-    AUTO_PLAY = "skip"  # Player skips their turn
+    SKIP = "skip"  # Player skips their turn
 
 
 class GameSettings(BaseModel):

@@ -314,7 +314,6 @@ const triggerSelfPlayAnimation = (cardCode: string) => {
   triggerPileImpact();
 };
 
-// --- Event Watcher ---
 watch(event, (newEvent) => {
   const eventType = newEvent.type;
   const originPlayerId = newEvent.player_id;
@@ -325,30 +324,24 @@ watch(event, (newEvent) => {
       triggerOpponentPlayAnimation(originPlayerId);
     }
   } else if (eventType === 'reverse') {
+    // LOCK: Lock interaction during the reverse overlay
+    isInteractionLocked.value = true;
     showReverseAnimation.value = true;
-    setTimeout(() => { showReverseAnimation.value = false; }, 2000);
+    setTimeout(() => {
+      showReverseAnimation.value = false;
+      isInteractionLocked.value = false;
+    }, 2000);
 
   } else if (eventType === 'skip') {
     if (affectedPlayerId) {
-      // 1. Force arrow to point at the victim (Detour)
       tempArrowTargetId.value = affectedPlayerId;
-
-      // 2. Show the Skip Icon
       skippedPlayerId.value = affectedPlayerId;
+      isInteractionLocked.value = true;
 
-      // 3. Lock interaction if it's me
-      if (affectedPlayerId === playerId.value) {
-         isInteractionLocked.value = true;
-      }
-
-      // 4. Release after Reduced Delay (1.2s instead of 2.0s)
       setTimeout(() => {
         tempArrowTargetId.value = null;
         skippedPlayerId.value = null;
-
-        if (affectedPlayerId === playerId.value) {
-          isInteractionLocked.value = false;
-        }
+        isInteractionLocked.value = false;
       }, 1200);
     }
 
@@ -364,11 +357,10 @@ watch(event, (newEvent) => {
   } else if (eventType === 'draw4' || eventType === 'draw2') {
     const count: number = eventType === 'draw4' ? 4 : 2;
     triggerDrawAnimation(affectedPlayerId, count);
-    if (affectedPlayerId === playerId.value) {
-      isInteractionLocked.value = true;
-      const totalAnimTime = (count * 250) + 700;
-      setTimeout(() => { isInteractionLocked.value = false; }, totalAnimTime);
-    }
+
+    isInteractionLocked.value = true;
+    const totalAnimTime = (count * 250) + 700;
+    setTimeout(() => { isInteractionLocked.value = false; }, totalAnimTime);
 
   } else if (eventType === 'draw_card') {
     triggerDrawAnimation(originPlayerId, 1);
