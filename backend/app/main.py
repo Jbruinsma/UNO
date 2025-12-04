@@ -122,25 +122,39 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                     }
                     await broadcast_to_room(new_game_id, response)
 
+                elif action == "save_game_settings":
+                    if current_game_id:
+                        settings = extra.get("settings")
+
+                        response = {
+                            "event": "game_settings_saved",
+                            "settings": settings
+                        }
+
+                        await broadcast_to_room(current_game_id, response)
+
                 elif action == "join_game":
-                    target_id = payload.get("game_id", "").upper()
+                    target_id: str = payload.get("game_id", "").upper()
 
-                    # Try to join the game
-                    game_state = game_manager.join_game(target_id, client_id, client_display_name)
-                    current_game_id = target_id
+                    if not target_id:
+                        raise Exception("Invalid game ID.")
 
-                    response = {
-                        "event": "player_joined",
-                        "game_id": target_id,
-                        "host_id": game_state.host_id,
-                        "players": game_state.players,
-                        "player_names": game_state.player_names,
-                        "new_player_id": client_id,
-                        "new_player_name": client_display_name,
-                        "message": f"{client_display_name} has joined the game!",
-                        "player_states": game_state.player_states
-                    }
-                    await broadcast_to_room(target_id, response)
+                    game_state: Optional[Game] = game_manager.join_game(target_id, client_id, client_display_name)
+                    if game_state:
+                        current_game_id = target_id
+
+                        response = {
+                            "event": "player_joined",
+                            "game_id": target_id,
+                            "host_id": game_state.host_id,
+                            "players": game_state.players,
+                            "player_names": game_state.player_names,
+                            "new_player_id": client_id,
+                            "new_player_name": client_display_name,
+                            "message": f"{client_display_name} has joined the game!",
+                            "player_states": game_state.player_states
+                        }
+                        await broadcast_to_room(target_id, response)
 
                 elif action == "leave_game":
                     if current_game_id:

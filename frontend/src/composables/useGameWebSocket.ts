@@ -11,6 +11,11 @@ const playerName = ref<string>("");
 const currentGameId = ref<string | null>(null);
 const gameState = ref<"LANDING" | "LOBBY" | "PLAYING">("LANDING");
 const playerStates = ref<Record<string,"playing" | "ready">>({});
+const gameSettings = ref<Record<string, any>>({
+  turnTimer: 30,
+  stackingMode: 'standard',
+  afkBehavior: 'draw_skip'
+});
 
 // Lobby State
 const hostId = ref<string>("");
@@ -104,6 +109,10 @@ export function useGameWebSocket() {
         resetInGameState();
         break;
 
+        case "game_settings_saved":
+          gameSettings.value = data.settings;
+          break;
+
       case "player_joined":
 
         players.value = data.players;
@@ -180,6 +189,12 @@ export function useGameWebSocket() {
     setTimeout(() => {
       socket.value?.send(JSON.stringify({ action: "create_game" }));
     }, 100);
+  };
+
+  const saveGameSettings = () => {
+    if (socket.value) {
+      socket.value.send(JSON.stringify({ action: "save_game_settings", extra: {settings: gameSettings.value} }));
+    }
   };
 
   const joinGame = (gameId: string, displayName: string) => {
@@ -268,6 +283,7 @@ export function useGameWebSocket() {
     event,
     gameState,
     playerStates,
+    gameSettings,
     players,
     playerNames,
     hostId,
@@ -286,6 +302,7 @@ export function useGameWebSocket() {
     disconnect,
     statusCheck,
     createGame,
+    saveGameSettings,
     joinGame,
     leaveGame,
     startGame,
