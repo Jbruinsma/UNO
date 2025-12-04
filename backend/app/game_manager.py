@@ -2,7 +2,7 @@ import random
 from typing import Dict, List, Optional, Set
 
 from backend.app.pydantic_models.game import Game
-from backend.app.pydantic_models.game_settings import GameSettings
+from backend.app.pydantic_models.game_settings import GameSettings, StackingMode, AFKBehavior
 # Assuming these imports exist in your project structure
 from backend.app.utils import create_deck, SPECIAL_CARDS, WILD_CARDS, advance_turn_counter, retrieve_card_info, \
     REGULAR_CARDS
@@ -65,12 +65,33 @@ class GameManager:
             })
         return lobby_data
 
-    def update_game_settings(self, game_id: str, game_settings: GameSettings) -> Optional[Game]:
-        game: Game = self.games[game_id]
-        if game:
-            game.game_settings = game_settings
+    def update_game_settings(self, game_id: str, game_settings: Dict) -> Optional[Game]:
+        game: Optional[Game] = self.games.get(game_id)
+        if not game:
+            return None
+
+        should_forfeit = game_settings.get("forfeitAfterSkips", True)
+        strikes = 3 if should_forfeit else 0
+
+        try:
+            s_mode = StackingMode(game_settings.get("stackingMode", "off").lower())
+            a_behavior = AFKBehavior(game_settings.get("afkBehavior", "draw_skip").lower())
+
+            game.game_settings = GameSettings(
+                turn_timeout_seconds=game_settings.get("turnTimer", 30),
+                stacking_mode= s_mode,
+                afk_behavior= a_behavior,
+                max_afk_strikes= strikes
+            )
+
             return game
-        return None
+
+        except ValueError as e:
+            print(f"Invalid setting provided: {e}")
+            return None
+        except Exception as e:
+            print(f"General error updating settings: {e}")
+            return None
 
     def reset_game(self, game_id: str) -> Game:
         """

@@ -13,8 +13,9 @@ const gameState = ref<"LANDING" | "LOBBY" | "PLAYING">("LANDING");
 const playerStates = ref<Record<string,"playing" | "ready">>({});
 const gameSettings = ref<Record<string, any>>({
   turnTimer: 30,
-  stackingMode: 'standard',
-  afkBehavior: 'draw_skip'
+  stackingMode: 'off',
+  afkBehavior: 'draw_skip',
+  forfeitAfterSkips: true
 });
 
 // Lobby State
@@ -86,8 +87,9 @@ export function useGameWebSocket() {
   const resetGameSettings = () => {
     gameSettings.value = {
       turnTimer: 30,
-      stackingMode: 'standard',
-      afkBehavior: 'draw_skip'
+      stackingMode: 'off',
+      afkBehavior: 'draw_skip',
+      forfeitAfterSkips: true
     };
   }
 
@@ -118,7 +120,14 @@ export function useGameWebSocket() {
         break;
 
         case "game_settings_saved":
-          gameSettings.value = data.settings;
+          const updatedSettings = data.settings;
+          gameSettings.value = {
+            turnTimer: updatedSettings.turn_timeout_seconds,
+            stackingMode: updatedSettings.stacking_mode,
+            afkBehavior: updatedSettings.afk_behavior,
+            forfeitAfterSkips: updatedSettings.max_afk_strikes > 0
+          };
+
           break;
 
       case "player_joined":

@@ -1,7 +1,7 @@
 import json
 import random
 import string
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from starlette.middleware.cors import CORSMiddleware
@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 from .connection_manager import ConnectionManager
 from .game_manager import GameManager
 from .pydantic_models.game import Game
+from .pydantic_models.game_settings import GameSettings
 from .pydantic_models.game_state import GameState
 
 app = FastAPI()
@@ -95,7 +96,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
             try:
                 payload = json.loads(data)
                 action: str = payload.get("action")
-                extra = payload.get("extra")
+                extra: Dict = payload.get("extra")
 
                 if action == "status_check":
                     await broadcast_lobby_state()
@@ -124,15 +125,16 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
 
                 elif action == "save_game_settings":
                     if current_game_id:
-                        settings = extra.get("settings")
-
+                        settings: Dict = extra.get("settings")
                         game_state: Optional[Game] = game_manager.update_game_settings(current_game_id, settings)
-                        if game_state:
+                        print(game_state)
+                        if game_state is not None:
                             response = {
                                 "event": "game_settings_saved",
-                                "settings": game_state.game_settings
+                                "settings": game_state.game_settings.model_dump()
                             }
                             await broadcast_to_room(current_game_id, response)
+                            print("SETTINGS SENT")
 
                 elif action == "join_game":
                     target_id: str = payload.get("game_id", "").upper()

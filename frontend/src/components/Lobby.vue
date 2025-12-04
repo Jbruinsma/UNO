@@ -136,9 +136,25 @@ const saveSettings = () => {
               <label>AFK Penalty</label>
               <select v-model="gameSettings.afkBehavior" class="select-input" :disabled="!isHost">
                 <option value="draw_skip">Draw & Skip Turn</option>
-                <option value="auto_play">Bot Plays Randomly</option>
+                <option value="skip">Skip</option>
               </select>
             </div>
+
+            <div class="setting-row toggle-row">
+              <div class="toggle-text">
+                <label>Strict Mode</label>
+                <span class="sub-label">Forfeit after 3 skips</span>
+              </div>
+              <label class="switch">
+                <input
+                  type="checkbox"
+                  v-model="gameSettings.forfeitAfterSkips"
+                  :disabled="!isHost"
+                >
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+
           </div>
 
           <div class="modal-footer">
@@ -321,4 +337,22 @@ const saveSettings = () => {
 .host-msg { font-size: 0.8rem; color: #94a3b8; font-style: italic; }
 .btn-secondary { background: white; border: 2px solid #e2e8f0; color: #64748b; padding: 12px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; }
 .btn-secondary:hover { background: #f1f5f9; color: #475569; }
+
+/* --- NEW TOGGLE SWITCH STYLES --- */
+.toggle-row { flex-direction: row; justify-content: space-between; align-items: center; }
+.toggle-text { display: flex; flex-direction: column; }
+.sub-label { font-size: 0.75rem; color: #94a3b8; font-weight: 500; }
+
+.switch { position: relative; display: inline-block; width: 48px; height: 26px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.slider-toggle { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #e2e8f0; transition: .4s; border-radius: 34px; }
+.slider-toggle:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+input:checked + .slider-toggle { background-color: #10b981; }
+input:checked + .slider-toggle:before { transform: translateX(22px); }
+
+/* Disabled toggle state */
+input:disabled + .slider-toggle { background-color: #f1f5f9; cursor: not-allowed; }
+input:disabled + .slider-toggle:before { background-color: #cbd5e1; }
 </style>
