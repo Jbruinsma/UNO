@@ -78,9 +78,15 @@ const getStatusLabel = (playerId: string) => {
 };
 
 const saveSettings = () => {
-  if (isHost.value) {
-    console.log("Saving settings:", gameSettings.value);
-    saveGameSettings();
+
+  if (isHost.value && !('playing' in playerStates.value)) {
+    let canSubmitSettings: boolean = true;
+
+    for (const userId in playerStates.value) {
+      if (playerStates.value[userId] === 'playing') canSubmitSettings = false;
+    }
+
+    if (canSubmitSettings) saveGameSettings();
   }
   showSettingsModal.value = false;
 };
