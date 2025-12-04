@@ -43,3 +43,8 @@ class GameSettings(BaseModel):
         ge=0,
         description="How many times a player can time out before being kicked (0 = infinite)."
     )
+
+    kick_after_max_strikes: bool = Field(
+        default=True,
+        description="Whether to kick the player after they reach the maximum number of strikes."
+    )

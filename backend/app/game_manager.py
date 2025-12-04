@@ -81,7 +81,8 @@ class GameManager:
                 turn_timeout_seconds=game_settings.get("turnTimer", 30),
                 stacking_mode= s_mode,
                 afk_behavior= a_behavior,
-                max_afk_strikes= strikes
+                max_afk_strikes= strikes,
+                kick_after_max_strikes= should_forfeit
             )
 
             return game
