@@ -12,6 +12,7 @@ class Game(BaseModel):
     players: List[str]
     player_names: Dict[str, str]
     player_states: Dict[str, str]
+    player_skips: Dict[str, int] = {}
     current_player_index: Optional[int] = None
     current_active_color: Optional[str] = None
     direction: int

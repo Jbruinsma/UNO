@@ -40,6 +40,9 @@ class GameManager:
             player_states= {
                 host_id: "ready"
             },
+            player_skips= {
+                host_id: 0
+            },
             current_player_index= None,
             current_active_color= None,
             direction= 1,  # 1 = clockwise, -1 = counterclockwise
@@ -212,6 +215,7 @@ class GameManager:
             game.players.append(user_id)
             game.player_names[user_id] = user_name
             game.player_states[user_id] = "ready"
+            game.player_skips[user_id] = 0
             game.player_cards[user_id] = []
 
         return game
@@ -246,6 +250,7 @@ class GameManager:
             if user_id in players:
                 game.players.remove(user_id)
                 del game.player_states[user_id]
+                del game.player_skips[user_id]
 
                 if user_id == game.host_id and len(game.players) > 0:
                     game.host_id = game.players[0]
