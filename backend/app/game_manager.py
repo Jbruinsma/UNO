@@ -2,6 +2,7 @@ import random
 from typing import Dict, List, Optional, Set
 
 from backend.app.pydantic_models.game import Game
+from backend.app.pydantic_models.game_settings import GameSettings
 # Assuming these imports exist in your project structure
 from backend.app.utils import create_deck, SPECIAL_CARDS, WILD_CARDS, advance_turn_counter, retrieve_card_info, \
     REGULAR_CARDS
@@ -29,22 +30,23 @@ class GameManager:
             raise Exception("Game ID collision. Try again.")
 
         self.games[game_id] = Game(
-            host_id=host_id,
-            state="waiting",
-            players=[host_id],
-            player_names={
+            host_id= host_id,
+            game_settings= GameSettings(),
+            state= "waiting",
+            players= [host_id],
+            player_names= {
                 host_id: host_name
             },
-            player_states={
+            player_states= {
                 host_id: "ready"
             },
-            current_player_index=None,
-            current_active_color=None,
-            direction=1,  # 1 = clockwise, -1 = counterclockwise
-            event=None,
-            deck=[],
-            discard_pile=[],
-            player_cards={}
+            current_player_index= None,
+            current_active_color= None,
+            direction= 1,  # 1 = clockwise, -1 = counterclockwise
+            event= None,
+            deck= [],
+            discard_pile= [],
+            player_cards= {}
         )
         return self.games[game_id]
 
@@ -62,6 +64,13 @@ class GameManager:
                 "state": game_state.state
             })
         return lobby_data
+
+    def update_game_settings(self, game_id: str, game_settings: GameSettings) -> Optional[Game]:
+        game: Game = self.games[game_id]
+        if game:
+            game.game_settings = game_settings
+            return game
+        return None
 
     def reset_game(self, game_id: str) -> Game:
         """

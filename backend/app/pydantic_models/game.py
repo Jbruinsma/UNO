@@ -2,9 +2,12 @@ from typing import List, Dict, Optional
 
 from pydantic import BaseModel
 
+from backend.app.pydantic_models.game_settings import GameSettings
+
 
 class Game(BaseModel):
     host_id: str
+    game_settings: GameSettings
     state: str
     players: List[str]
     player_names: Dict[str, str]

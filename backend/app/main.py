@@ -126,12 +126,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, client_displa
                     if current_game_id:
                         settings = extra.get("settings")
 
-                        response = {
-                            "event": "game_settings_saved",
-                            "settings": settings
-                        }
-
-                        await broadcast_to_room(current_game_id, response)
+                        game_state: Optional[Game] = game_manager.update_game_settings(current_game_id, settings)
+                        if game_state:
+                            response = {
+                                "event": "game_settings_saved",
+                                "settings": game_state.game_settings
+                            }
+                            await broadcast_to_room(current_game_id, response)
 
                 elif action == "join_game":
                     target_id: str = payload.get("game_id", "").upper()

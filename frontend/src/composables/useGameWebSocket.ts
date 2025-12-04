@@ -83,6 +83,14 @@ export function useGameWebSocket() {
     }
   };
 
+  const resetGameSettings = () => {
+    gameSettings.value = {
+      turnTimer: 30,
+      stackingMode: 'standard',
+      afkBehavior: 'draw_skip'
+    };
+  }
+
   const handleMessage = (data: any) => {
 
     // console.log("Handling message:", data);
@@ -209,6 +217,7 @@ export function useGameWebSocket() {
   const leaveGame = () => {
     if (socket.value) {
       socket.value.send(JSON.stringify({ action: "leave_game" }));
+      resetGameSettings();
       gameState.value = "LANDING";
       players.value = [];
       currentGameId.value = null;
