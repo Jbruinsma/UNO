@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useGameWebSocket } from '../composables/useGameWebSocket';
 
 const {
@@ -17,8 +17,14 @@ const {
   startGame
 } = useGameWebSocket();
 
-const showNotification = ref(false);
-const showSettingsModal = ref(false);
+const showNotification = ref<boolean>(false);
+const showSettingsModal = ref<boolean>(false);
+const settingsError = ref<string>('');
+const settingsChanges = ref<Record<string, any>>({});
+
+onMounted(() => {
+  settingsChanges.value = JSON.parse(JSON.stringify(gameSettings.value));
+});
 
 const copyCode = async () => {
   if (!currentGameId.value) return;
@@ -31,7 +37,7 @@ const copyCode = async () => {
       await navigator.clipboard.writeText(textToCopy);
       success = true;
     } catch (err) {
-      console.warn('Clipboard API failed, trying fallback...', err);
+      console.warn(err);
     }
   }
 
@@ -39,20 +45,17 @@ const copyCode = async () => {
     try {
       const textArea = document.createElement("textarea");
       textArea.value = textToCopy;
-
       textArea.style.top = "0";
       textArea.style.left = "0";
       textArea.style.position = "fixed";
       textArea.style.opacity = "0";
-
       document.body.appendChild(textArea);
       textArea.focus();
       textArea.select();
-
       success = document.execCommand('copy');
       document.body.removeChild(textArea);
     } catch (err) {
-      console.error('Fallback copy failed', err);
+      console.error(err);
     }
   }
 
@@ -77,19 +80,40 @@ const getStatusLabel = (playerId: string) => {
   return 'Ready';
 };
 
-const saveSettings = () => {
+watch(showSettingsModal, (isOpen) => {
+  if (isOpen) {
+    settingsChanges.value = JSON.parse(JSON.stringify(gameSettings.value));
+  }
+});
 
-  if (isHost.value && !('playing' in playerStates.value)) {
+watch(gameSettings, (newSettings) => {
+  if (!showSettingsModal.value) {
+    settingsChanges.value = JSON.parse(JSON.stringify(newSettings));
+  }
+}, { deep: true });
+
+const saveSettings = () => {
+  if (isHost.value) {
     let canSubmitSettings: boolean = true;
 
     for (const userId in playerStates.value) {
       if (playerStates.value[userId] === 'playing') canSubmitSettings = false;
     }
 
-    if (canSubmitSettings) saveGameSettings();
+    if (canSubmitSettings) {
+      gameSettings.value = JSON.parse(JSON.stringify(settingsChanges.value));
+      saveGameSettings();
+      showSettingsModal.value = false;
+    } else {
+      settingsError.value = 'Cannot update settings while a game is in progress.';
+      setTimeout(() => { settingsError.value = ''; }, 4000);
+    }
   }
-  showSettingsModal.value = false;
 };
+
+const closeSettingsModelWithoutChanges = () => {
+  showSettingsModal.value = false;
+}
 </script>
 
 <template>
@@ -105,22 +129,22 @@ const saveSettings = () => {
     </Transition>
 
     <Transition name="fade">
-      <div v-if="showSettingsModal" class="modal-backdrop" @click.self="saveSettings">
+      <div v-if="showSettingsModal" class="modal-backdrop" @click.self="closeSettingsModelWithoutChanges">
         <div class="modal-card">
           <div class="modal-header">
             <div class="header-title-group">
               <h3>Game Rules</h3>
               <span v-if="!isHost" class="badge-readonly">View Only</span>
             </div>
-            <button class="btn-close" @click="saveSettings">✕</button>
+            <button class="btn-close" @click="closeSettingsModelWithoutChanges">✕</button>
           </div>
 
           <div class="modal-body">
             <div class="setting-row">
-              <label>Turn Timer ({{ gameSettings.turnTimer }}s)</label>
+              <label>Turn Timer ({{ settingsChanges.turnTimer }}s)</label>
               <input
                 type="range"
-                v-model.number="gameSettings.turnTimer"
+                v-model.number="settingsChanges.turnTimer"
                 min="5"
                 max="60"
                 step="5"
@@ -131,7 +155,7 @@ const saveSettings = () => {
 
             <div class="setting-row">
               <label>Stacking Rules</label>
-              <select v-model="gameSettings.stackingMode" class="select-input" :disabled="!isHost">
+              <select v-model="settingsChanges.stackingMode" class="select-input" :disabled="!isHost">
                 <option value="off">No Stacking</option>
                 <option value="standard">Standard (+2 on +2)</option>
                 <option value="aggressive">Aggressive (Any + card)</option>
@@ -140,7 +164,7 @@ const saveSettings = () => {
 
             <div class="setting-row">
               <label>AFK Penalty</label>
-              <select v-model="gameSettings.afkBehavior" class="select-input" :disabled="!isHost">
+              <select v-model="settingsChanges.afkBehavior" class="select-input" :disabled="!isHost">
                 <option value="draw_skip">Draw & Skip Turn</option>
                 <option value="skip">Skip</option>
               </select>
@@ -154,11 +178,15 @@ const saveSettings = () => {
               <label class="switch">
                 <input
                   type="checkbox"
-                  v-model="gameSettings.forfeitAfterSkips"
+                  v-model="settingsChanges.forfeitAfterSkips"
                   :disabled="!isHost"
                 >
                 <span class="slider-toggle"></span>
               </label>
+            </div>
+
+            <div v-if="settingsError" class="settings-error">
+              <p>{{ settingsError }}</p>
             </div>
 
           </div>
@@ -297,7 +325,7 @@ const saveSettings = () => {
 @keyframes ping { 75%, 100% { opacity: 0; transform: scale(2); } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-/* --- SETTINGS MODAL STYLES --- */
+.settings-error { text-align: center; color: #ef4444; font-weight: 700; }
 .header-right { display: flex; align-items: center; gap: 12px; }
 
 .settings-btn { background: white; border: 2px solid #cbd5e1; border-radius: 12px; color: #64748b; cursor: pointer; padding: 8px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; }
@@ -315,7 +343,6 @@ const saveSettings = () => {
 .header-title-group { display: flex; flex-direction: column; gap: 4px; }
 .modal-header h3 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; }
 
-/* Read Only Badge */
 .badge-readonly { font-size: 0.65rem; text-transform: uppercase; font-weight: 800; background: #e2e8f0; color: #64748b; padding: 2px 8px; border-radius: 6px; align-self: flex-start; }
 
 .btn-close { background: transparent; border: none; font-size: 1.5rem; color: #94a3b8; cursor: pointer; padding: 4px; line-height: 1; border-radius: 50%; transition: background 0.2s; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;}
@@ -327,7 +354,6 @@ const saveSettings = () => {
 
 .select-input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 2px solid #e2e8f0; font-size: 1rem; color: #1e293b; background-color: white; outline: none; transition: border-color 0.2s; appearance: none; }
 .select-input:focus { border-color: #38bdf8; }
-/* Disabled state for inputs */
 .select-input:disabled { background-color: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; cursor: not-allowed; }
 
 .slider { -webkit-appearance: none; width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; outline: none; }
@@ -344,7 +370,6 @@ const saveSettings = () => {
 .btn-secondary { background: white; border: 2px solid #e2e8f0; color: #64748b; padding: 12px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; }
 .btn-secondary:hover { background: #f1f5f9; color: #475569; }
 
-/* --- NEW TOGGLE SWITCH STYLES --- */
 .toggle-row { flex-direction: row; justify-content: space-between; align-items: center; }
 .toggle-text { display: flex; flex-direction: column; }
 .sub-label { font-size: 0.75rem; color: #94a3b8; font-weight: 500; }
