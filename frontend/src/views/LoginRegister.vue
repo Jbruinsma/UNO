@@ -29,7 +29,6 @@ const isValid = computed(() => {
 const handleSubmit = () => {
   if (!isValid.value) return;
 
-  // Placeholder for your API logic
   const payload = {
     username: username.value,
     password: password.value
@@ -47,7 +46,7 @@ const handleSubmit = () => {
   <div class="login-container">
 
     <header class="top-nav">
-      <a href="#" class="back-link">← Back to Home</a>
+      <a href="/" class="back-link">← Back to Home</a>
     </header>
 
     <div class="content-box">

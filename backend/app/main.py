@@ -1,17 +1,29 @@
 import json
 import random
 import string
+from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from starlette.middleware.cors import CORSMiddleware
 
-# Preserving your relative imports
+from .config import settings
 from .connection_manager import ConnectionManager
+from .db import engine, Base
 from .game_manager import GameManager
 from .pydantic_models.game import Game
 from .pydantic_models.game_settings import GameSettings
 from .pydantic_models.game_state import GameState
+
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
+
 
 app = FastAPI()
 connection_manager = ConnectionManager()
@@ -25,6 +37,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from .routes.auth import router as auth_router
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+@app.get("/health")
+async def health() -> Dict[str, Any]:
+    return { "status": "ok", "database": settings.DB_NAME }
 
 def generate_game_id(length: int =4) -> str:
     """
