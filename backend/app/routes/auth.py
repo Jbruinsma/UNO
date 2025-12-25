@@ -4,10 +4,11 @@ from backend.app.pydantic_models.incoming.login_credentials import LoginCredenti
 
 router = APIRouter()
 
-@router.get("/login")
+@router.post("/login")
 async def login(login_credentials: LoginCredentials):
-    pass
+    print(login_credentials)
+    return {}
 
-@router.get("/register")
+@router.post("/register")
 async def register():
     pass

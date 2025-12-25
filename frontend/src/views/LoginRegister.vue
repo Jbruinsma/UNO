@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import {postToAPI} from "@/utils/api.ts";
 
 const isLoginMode = ref(true);
 const username = ref('');
 const password = ref('');
 const confirmPassword = ref('');
 const errorMsg = ref('');
+
+const canHitButton = ref<boolean>(true);
 
 const toggleMode = () => {
   isLoginMode.value = !isLoginMode.value;
@@ -26,7 +29,8 @@ const isValid = computed(() => {
   );
 });
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
+  if (!canHitButton.value) return;
   if (!isValid.value) return;
 
   const payload = {
@@ -34,10 +38,21 @@ const handleSubmit = () => {
     password: password.value
   };
 
-  if (isLoginMode.value) {
-    console.log("Logging in with:", payload);
-  } else {
-    console.log("Registering with:", payload);
+  try {
+    canHitButton.value = false;
+    errorMsg.value = '';
+
+    if (isLoginMode.value) {
+
+      const loginResponse = await postToAPI('/auth/login', payload);
+      console.log(loginResponse);
+
+    } else {
+
+    }
+
+  } finally {
+    canHitButton.value = true;
   }
 };
 </script>
