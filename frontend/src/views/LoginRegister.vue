@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import {postToAPI} from "@/utils/api.ts";
+import { postToAPI } from "@/utils/api.ts";
+import router from "@/router";
 
 const isLoginMode = ref(true);
 const username = ref('');
+const email = ref('');
+const birthday = ref(''); // Added birthday ref
 const password = ref('');
 const confirmPassword = ref('');
 const errorMsg = ref('');
@@ -14,6 +17,8 @@ const toggleMode = () => {
   isLoginMode.value = !isLoginMode.value;
   errorMsg.value = '';
   username.value = '';
+  email.value = '';
+  birthday.value = ''; // Reset birthday on toggle
   password.value = '';
   confirmPassword.value = '';
 };
@@ -22,8 +27,11 @@ const isValid = computed(() => {
   if (isLoginMode.value) {
     return username.value.length > 0 && password.value.length > 0;
   }
+  // Added birthday check for registration
   return (
     username.value.length > 0 &&
+    email.value.length > 0 &&
+    birthday.value.length > 0 &&
     password.value.length > 0 &&
     password.value === confirmPassword.value
   );
@@ -33,24 +41,38 @@ const handleSubmit = async () => {
   if (!canHitButton.value) return;
   if (!isValid.value) return;
 
-  const payload = {
+  const payload: Record<string, string> = {
     username: username.value,
     password: password.value
   };
+
+  if (!isLoginMode.value) {
+    payload.email = email.value;
+    payload.birthday = birthday.value;
+  }
 
   try {
     canHitButton.value = false;
     errorMsg.value = '';
 
     if (isLoginMode.value) {
-
       const loginResponse = await postToAPI('/auth/login', payload);
       console.log(loginResponse);
-
     } else {
+
+      const registerResponse = await postToAPI('/auth/register', payload);
+      console.log(registerResponse);
+//       {
+//   "message": "User created successfully",
+//   "user_id": "d460bc69-0c48-4139-ae60-1f8cd37d771a"
+// }
+
+      // Redirect to the login page if successful
 
     }
 
+  } catch (e: any) {
+    errorMsg.value = e.message || "An error occurred";
   } finally {
     canHitButton.value = true;
   }
@@ -82,6 +104,27 @@ const handleSubmit = async () => {
             type="text"
             class="text-input"
             placeholder="Username"
+          />
+        </div>
+
+        <div v-if="!isLoginMode" class="input-wrapper">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            class="text-input"
+            placeholder="Email Address"
+          />
+        </div>
+
+        <div v-if="!isLoginMode" class="input-wrapper">
+          <label for="birthday">Date of Birth</label>
+          <input
+            id="birthday"
+            v-model="birthday"
+            type="date"
+            class="text-input"
           />
         </div>
 
@@ -135,6 +178,7 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
+/* Keeping styles identical to ensure consistent look */
 .back-link { color: #9ca3af; font-size: 0.9rem; font-weight: 600; text-decoration: none; transition: color 0.2s; }
 .back-link:hover { color: white; }
 .badge { background: #facc15; border-radius: 20px; color: #854d0e; font-size: 0.9rem; letter-spacing: 0; padding: 4px 10px; vertical-align: middle; }

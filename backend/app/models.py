@@ -33,7 +33,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False)
     birthday = Column(Date, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    current_balance = Column(DECIMAL(15, 2), default=100.00)
+    current_balance = Column(DECIMAL(15, 2), default=0.00)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     # Relationships

@@ -5,6 +5,11 @@ SPECIAL_CARDS: List[str] = ['S', 'R', 'D2']
 WILD_CARDS: List[str] = ['W-Wild', 'W-W4']
 REGULAR_CARDS: List[str] = ['R', 'B', 'G', 'Y']
 
+from datetime import date
+
+def str_to_date_iso(date_str: str) -> date:
+    return date.fromisoformat(date_str)
+
 def create_deck() -> List[str]:
     """
     Creates a shuffled deck of cards
