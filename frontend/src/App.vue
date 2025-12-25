@@ -1,28 +1,10 @@
 <script setup lang="ts">
-import HomeLanding from './components/LandingPage.vue';
-import { useGameWebSocket } from './composables/useGameWebSocket';
-import Lobby from "@/components/Lobby.vue";
-import GameTable from "@/components/GameTable.vue";
-
-// We import the state here to decide what to render
-const { gameState } = useGameWebSocket();
+import { RouterView } from 'vue-router'
 </script>
 
 <template>
   <main>
-    <!-- Landing Page -->
-    <HomeLanding v-if="gameState === 'LANDING'" />
-
-    <!-- Lobby -->
-    <div v-else-if="gameState === 'LOBBY'" class="lobby-placeholder">
-      <Lobby></Lobby>
-    </div>
-
-    <!-- Game In Progress -->
-    <div v-else-if="gameState === 'PLAYING'" class="game-placeholder">
-      <GameTable></GameTable>
-    </div>
-
+    <RouterView />
   </main>
 </template>
 
