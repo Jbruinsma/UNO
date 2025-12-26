@@ -7,6 +7,7 @@ from sqlalchemy.sql import func
 from backend.app.db import Base
 
 
+
 class TransactionType(enum.Enum):
     DEPOSIT = "DEPOSIT"
     WITHDRAWAL = "WITHDRAWAL"
@@ -28,14 +29,17 @@ class CatalogStatus(enum.Enum):
     MAINTENANCE = "MAINTENANCE"
     COMING_SOON = "COMING_SOON"
 
+
 class UserRole(enum.Enum):
-    ADMIN = "ADMIN"
     USER = "USER"
+    ADMIN = "ADMIN"
+
 
 class UserStatus(enum.Enum):
     ACTIVE = "ACTIVE"
     SUSPENDED = "SUSPENDED"
     DEACTIVATED = "DEACTIVATED"
+
 
 
 class User(Base):
@@ -54,7 +58,6 @@ class User(Base):
 
     transactions = relationship("WalletTransaction", back_populates="user")
     hosted_games = relationship("GameSession", foreign_keys="GameSession.host_user_id", back_populates="host")
-    won_games = relationship("GameSession", foreign_keys="GameSession.winner_user_id", back_populates="winner")
 
 
 class GameCatalog(Base):
@@ -80,19 +83,16 @@ class GameSession(Base):
     game_type_id = Column(String(20), ForeignKey("game_catalog.game_type_id"), nullable=False)
     room_code = Column(String(10), unique=True, nullable=False)
     host_user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
-
     status = Column(Enum(GameSessionStatus), default=GameSessionStatus.WAITING)
+    current_players = Column(Integer, default=1)
+    max_players = Column(Integer, nullable=False, default=10)
     buy_in_amount = Column(DECIMAL(10, 2), nullable=False, default=0.00)
     pot_total = Column(DECIMAL(10, 2), default=0.00)
-
-    winner_user_id = Column(String(36), ForeignKey("users.user_id"), nullable=True)
-
     created_at = Column(TIMESTAMP, server_default=func.now())
     finished_at = Column(TIMESTAMP, nullable=True)
 
     game_type = relationship("GameCatalog", back_populates="sessions")
     host = relationship("User", foreign_keys=[host_user_id], back_populates="hosted_games")
-    winner = relationship("User", foreign_keys=[winner_user_id], back_populates="won_games")
 
 
 class WalletTransaction(Base):

@@ -9,7 +9,7 @@ const username = ref<string>('');
 const balance = ref<number>(0.00);
 const showUserMenu = ref(false);
 const isLoading = ref(true);
-const isAdmin = ref(false); // 1. Add reactive state for Admin status
+const isAdmin = ref(false);
 
 interface Game {
   gameTypeId: string;

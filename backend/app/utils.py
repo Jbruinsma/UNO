@@ -1,4 +1,5 @@
 import random
+import string
 from typing import Tuple, List
 
 SPECIAL_CARDS: List[str] = ['S', 'R', 'D2']
@@ -6,6 +7,15 @@ WILD_CARDS: List[str] = ['W-Wild', 'W-W4']
 REGULAR_CARDS: List[str] = ['R', 'B', 'G', 'Y']
 
 from datetime import date
+
+
+def generate_game_id(length: int =4) -> str:
+    """
+    Generate a random 4-letter room ID (e.g., 'ABCD')
+    """
+
+    return ''.join(random.choices(string.ascii_uppercase, k=length))
+
 
 def str_to_date_iso(date_str: str) -> date:
     return date.fromisoformat(date_str)
