@@ -38,7 +38,11 @@ app.add_middleware(
 )
 
 from .routes.auth import router as auth_router
+from .routes.dashboard import router as dashboard_router
+from .routes.user import router as user_router
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(user_router, prefix="/users", tags=["user"])
 
 @app.get("/health")
 async def health() -> Dict[str, Any]:

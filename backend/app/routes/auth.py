@@ -18,8 +18,6 @@ router = APIRouter()
 
 @router.post("/login")
 async def login(login_credentials: LoginCredentials, db: AsyncSession = Depends(get_session)):
-    print(login_credentials)
-
     existing_user_statement = select(User).where(User.username == login_credentials.username)
     result = await db.execute(existing_user_statement)
     existing_user = result.scalars().first()
@@ -32,12 +30,13 @@ async def login(login_credentials: LoginCredentials, db: AsyncSession = Depends(
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(
-        data={"sub": existing_user.username, "id": existing_user.id}
+        data={"sub": existing_user.username, "id": existing_user.user_id }
     )
 
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "user_role": existing_user.role
     }
 
 @router.post("/register")
@@ -75,7 +74,7 @@ async def register(registration_credentials: RegistrationCredentials, db: AsyncS
 
         return {
             "message": "User created successfully",
-            "user_id": new_user.user_id
+            "user_id": new_user.user_id,
         }
 
     except IntegrityError:

@@ -56,18 +56,18 @@ const handleSubmit = async () => {
     errorMsg.value = '';
 
     if (isLoginMode.value) {
+
       const loginResponse = await postToAPI('/auth/login', payload);
-      console.log(loginResponse);
+
+      localStorage.setItem('token', loginResponse.access_token);
+      localStorage.setItem('user_id', loginResponse.user_id || '');
+      localStorage.setItem('user_role', loginResponse.user_role);
+      await router.push('/dashboard');
+
     } else {
 
-      const registerResponse = await postToAPI('/auth/register', payload);
-      console.log(registerResponse);
-//       {
-//   "message": "User created successfully",
-//   "user_id": "d460bc69-0c48-4139-ae60-1f8cd37d771a"
-// }
-
-      // Redirect to the login page if successful
+      await postToAPI('/auth/register', payload);
+      toggleMode();
 
     }
 
