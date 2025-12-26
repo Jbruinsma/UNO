@@ -1,145 +1,106 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useSoloGameWebSocket } from '@/composables/useSoloGameWebSocket';
+import { fetchFromAPI } from "@/utils/api.ts";
+import CreateGameModal from '@/components/CreateGameModal.vue';
+
+interface UserProfile {
+  userId: string;
+  username: string;
+  email: string;
+  birthday: string;
+  currentBalance: string;
+  createdAt: string;
+}
 
 const route = useRoute();
 const router = useRouter();
 
-// 1. Dynamic Game Type (e.g., 'SOLO', 'POKER')
-const gameTypeId = (route.params.id as string) || 'SOLO';
+const gameTypeId = (route.params.id as string)?.toUpperCase() || 'SOLO';
 
-// State
-const currentUser = ref<string>('Player'); // Will be updated by system message if needed
-const balance = ref<number>(1000.00); // You might want to fetch this from an API endpoint later
-const isLoading = ref(true);
-const privateCode = ref('');
-const socket = ref<WebSocket | null>(null);
-const connectionError = ref<string>('');
-
-interface GameSession {
-  sessionId: string;
-  roomCode: string;
-  hostUsername: string;
-  currentPlayers: number;
-  maxPlayers: number;
-  buyInAmount: number;
-  status: 'WAITING' | 'IN_PROGRESS';
+interface GameConnector {
+  state: {
+    availableGames: any[];
+    isConnected: boolean;
+    error: string | null;
+  };
+  actions: {
+    initConnection: (name: string) => void;
+    disconnect: () => void;
+    createGame: (options: { maxPlayers: number; buyIn: number }) => void;
+    joinGame: (gameId: string, name: string) => void;
+    statusCheck: () => void;
+  };
 }
 
-const sessions = ref<GameSession[]>([]);
+const getGameConnector = (type: string): GameConnector | null => {
+  switch (type) {
+    case 'SOLO': {
+      const solo = useSoloGameWebSocket();
+      return {
+        state: {
+          get availableGames() { return solo.availableGames.value },
+          get isConnected() { return solo.isConnected.value },
+          get error() { return solo.currentError.value }
+        },
+        actions: {
+          initConnection: solo.initConnection,
+          disconnect: solo.disconnect,
+          createGame: solo.createGame,
+          joinGame: solo.joinGame,
+          statusCheck: solo.statusCheck
+        }
+      };
+    }
+    default:
+      console.error(`No composable found for game type: ${type}`);
+      return null;
+  }
+};
 
+const connector = getGameConnector(gameTypeId);
+
+const showCreateModal = ref(false);
+const currentUser = ref<string>('Player');
+const balance = ref<number>(0.00);
+const privateCode = ref('');
 const isValidCode = computed(() => privateCode.value.length === 4);
 
-// --- WebSocket Logic ---
-const connectWebSocket = () => {
-  const token = localStorage.getItem('token');
+const sessions = computed(() => {
+  if (!connector) return [];
+  return connector.state.availableGames.map((g: any) => ({
+    sessionId: g.game_id,
+    roomCode: g.game_id,
+    hostUsername: g.host_name || 'Unknown',
+    currentPlayers: g.player_count || 0,
+    maxPlayers: g.max_players || 4,
+    buyInAmount: g.buy_in || 0,
+    status: g.is_active ? 'IN_PROGRESS' : 'WAITING'
+  }));
+});
 
-  if (!token) {
-    console.error("No access token found. Redirecting to login.");
-    router.push('/login');
-    return;
-  }
+const connectionError = computed(() => connector?.state.error || '');
+const isLoading = computed(() => !connector?.state.isConnected);
 
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  // Adjust host if your API is on a different port in dev (e.g. localhost:8000)
-  const host = 'localhost:8000';
-  const wsUrl = `${protocol}://${host}/games/${gameTypeId}/ws?token=${token}`;
-
-  console.log(`Connecting to ${wsUrl}`);
-  socket.value = new WebSocket(wsUrl);
-
-  socket.value.onopen = () => {
-    console.log("Connected to Lobby WebSocket");
-    connectionError.value = '';
-    // Optional: Request status update immediately
-    sendMessage("status_check");
-  };
-
-  socket.value.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-
-      switch (data.event) {
-        case 'lobby_update':
-          // Map backend data to frontend interface
-          sessions.value = data.games.map((g: any) => ({
-            sessionId: g.game_id,
-            roomCode: g.game_id,
-            hostUsername: g.host_name || 'Unknown',
-            currentPlayers: g.player_count,
-            maxPlayers: g.max_players || 4,
-            buyInAmount: g.buy_in || 0,
-            status: g.is_active ? 'IN_PROGRESS' : 'WAITING'
-          }));
-          isLoading.value = false;
-          break;
-
-        case 'game_created':
-        case 'game_joined':
-          console.log(`Joining game ${data.game_id}...`);
-          // Navigate to the actual game component
-          router.push(`/game/${gameTypeId}/${data.game_id}`);
-          break;
-
-        case 'system':
-          console.log("System:", data.message);
-          // Optional: Parse "Welcome [Username]" to set currentUser name
-          if (data.message.startsWith("Welcome")) {
-             const name = data.message.split(' ')[1];
-             if(name) currentUser.value = name;
-          }
-          break;
-
-        case 'error':
-          console.error("Server Error:", data.message);
-          alert(data.message); // Simple feedback for now
-          break;
-      }
-    } catch (e) {
-      console.error("Failed to parse websocket message", e);
-    }
-  };
-
-  socket.value.onclose = (event) => {
-    console.log("WebSocket Closed", event.code, event.reason);
-    if (event.code === 1008) {
-      alert("Session expired. Please log in again.");
-      router.push('/auth/login');
-    } else if (!event.wasClean) {
-      connectionError.value = "Connection lost. Reconnecting...";
-      // Simple reconnect logic could go here
-    }
-  };
-
-  socket.value.onerror = (error) => {
-    console.error("WebSocket Error:", error);
-  };
+const openCreateModal = () => {
+  showCreateModal.value = true;
 };
 
-const sendMessage = (action: string, payload: any = {}) => {
-  if (socket.value && socket.value.readyState === WebSocket.OPEN) {
-    socket.value.send(JSON.stringify({ action, ...payload }));
-  } else {
-    console.warn("Socket not open. Cannot send message.");
-  }
+const handleCreateGame = (options: { maxPlayers: number; buyIn: number }) => {
+  if (!connector) return;
+  connector.actions.createGame(options);
+  showCreateModal.value = false;
 };
-
-// --- Actions ---
 
 const joinSession = (roomCode: string) => {
-  if (!roomCode) return;
-  console.log(`Requesting to join room ${roomCode}`);
-  sendMessage("join_game", { game_id: roomCode });
+  if (!roomCode || !connector) return;
+  connector.actions.joinGame(roomCode, currentUser.value);
 };
 
 const handleJoinPrivate = () => {
   if (!isValidCode.value) return;
   joinSession(privateCode.value.toUpperCase());
-};
-
-const createSession = () => {
-  console.log("Requesting to create table...");
-  sendMessage("create_game");
 };
 
 const formatCurrency = (val: number) => {
@@ -150,15 +111,35 @@ const goBack = () => {
   router.push('/dashboard');
 };
 
-// --- Lifecycle ---
-
-onMounted(() => {
-  connectWebSocket();
+onMounted(async () => {
+  if (connector) {
+    try {
+      const profile: UserProfile = await fetchFromAPI('/users/me');
+      if (profile) {
+        currentUser.value = profile.username;
+        balance.value = parseFloat(profile.currentBalance);
+      }
+      connector.actions.initConnection(currentUser.value);
+      if (connector.state.isConnected) {
+        connector.actions.statusCheck();
+      }
+    } catch (error) {
+      console.error("Error loading profile or connecting:", error);
+      connector.actions.initConnection(currentUser.value);
+    }
+  }
 });
 
 onUnmounted(() => {
-  if (socket.value) {
-    socket.value.close();
+  if (connector) {
+    connector.actions.disconnect();
+  }
+});
+
+const { currentGameId } = useSoloGameWebSocket();
+watch(currentGameId, (newId) => {
+  if (newId) {
+    router.push(`/game/${gameTypeId}/${newId}`);
   }
 });
 </script>
@@ -215,7 +196,7 @@ onUnmounted(() => {
 
           <div class="divider-vertical"></div>
 
-          <button @click="createSession" class="btn-create">
+          <button @click="openCreateModal" class="btn-create">
             + Create Table
           </button>
         </div>
@@ -265,11 +246,18 @@ onUnmounted(() => {
       </div>
 
     </main>
+
+    <CreateGameModal
+      :is-open="showCreateModal"
+      :is-loading="isLoading"
+      :user-balance="balance"
+      @close="showCreateModal = false"
+      @create="handleCreateGame"
+    />
   </div>
 </template>
 
 <style scoped>
-/* Keeping your existing styles */
 .lobby-container {
   background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
   min-height: 100vh;

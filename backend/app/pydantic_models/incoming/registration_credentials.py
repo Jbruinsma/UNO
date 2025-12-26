@@ -1,7 +1,7 @@
 from datetime import date
 from pydantic import BaseModel, field_validator, model_validator, EmailStr
 
-from backend.app.utils import str_to_date_iso
+from app.utils import str_to_date_iso
 
 
 class RegistrationCredentials(BaseModel):

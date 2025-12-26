@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch, ref, onMounted } from 'vue';
-import { useGameWebSocket } from '../composables/useGameWebSocket';
+import { useSoloGameWebSocket } from '../composables/useSoloGameWebSocket.ts';
 
 const {
   gameState,
@@ -23,7 +23,7 @@ const {
   endGame,
   backToLobby,
   isConnected
-} = useGameWebSocket();
+} = useSoloGameWebSocket();
 
 // --- Local State ---
 const showReverseAnimation = ref(false);

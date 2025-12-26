@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, BigInteger, DECIMAL, ForeignKey, TIMESTAM
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from backend.app.db import Base
+from app.db import Base
 
 
 
@@ -88,6 +88,7 @@ class GameSession(Base):
     max_players = Column(Integer, nullable=False, default=10)
     buy_in_amount = Column(DECIMAL(10, 2), nullable=False, default=0.00)
     pot_total = Column(DECIMAL(10, 2), default=0.00)
+    round_number = Column(Integer, default=0)
     created_at = Column(TIMESTAMP, server_default=func.now())
     finished_at = Column(TIMESTAMP, nullable=True)
 

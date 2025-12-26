@@ -1,14 +1,16 @@
 import json
 from typing import List, Dict
 
-from backend.app.dependencies import game_manager, connection_manager
-from backend.app.pydantic_models.game import Game
-from backend.app.pydantic_models.game_state import GameState
+from app.dependencies import game_manager, connection_manager
+from app.pydantic_models.game import Game
+from app.pydantic_models.game_state import GameState
 
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from backend.app.db import async_session
-from backend.app.models import GameSession, GameSessionStatus
+
+
+from app.db import async_session
+from app.models import GameSession, GameSessionStatus
 
 async def get_database_lobby_info():
     """

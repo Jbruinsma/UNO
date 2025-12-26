@@ -1,4 +1,5 @@
 import { ref, computed } from "vue";
+import { useRouter } from "vue-router";
 
 // Global state (Singleton)
 const socket = ref<WebSocket | null>(null);
@@ -20,8 +21,8 @@ const gameSettings = ref<Record<string, any>>({
 
 // Lobby State
 const hostId = ref<string>("");
-const players = ref<string[]>([]); // List of Player IDs
-const playerNames = ref<Record<string, string>>({}); // Map: ID -> Name
+const players = ref<string[]>([]);
+const playerNames = ref<Record<string, string>>({});
 const availableGames = ref<any[]>([]);
 
 // --- In-Game State ---
@@ -29,50 +30,77 @@ const myHand = ref<string[]>([]);
 const currentActiveColor = ref<string>("");
 const topCard = ref<string>("");
 const currentPlayerId = ref<string>("");
-const direction = ref<number>(1); // 1 for clockwise, -1 for counter-clockwise
-const otherPlayerCardCounts = ref<Record<string, number>>({}) // {uuid: cardCount}
+const direction = ref<number>(1);
+const otherPlayerCardCounts = ref<Record<string, number>>({})
 const event = ref<Record<string, any>>({});
 const lockDrawableCardPile = ref<boolean>(false);
 
-export function useGameWebSocket() {
+export function useSoloGameWebSocket() {
+  const router = useRouter();
 
   const initConnection = (displayName: string) => {
+    // 1. Prevent double connections
     if (socket.value?.readyState === WebSocket.OPEN) return;
 
-    let storedId = localStorage.getItem("uno_player_id");
-    if (!storedId) {
-      storedId = "user_" + Math.floor(Math.random() * 10000);
-      localStorage.setItem("uno_player_id", storedId);
+    // 2. Auth & Token Logic
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error("No access token found. Redirecting to login.");
+      if (router) router.push('/login');
+      return;
     }
-    playerId.value = storedId;
-    playerName.value = displayName;
 
-    const safeName = encodeURIComponent(displayName);
-    const hostname = window.location.hostname;
-    const socketUrl = `ws://${hostname}:8000/ws/${playerId.value}/${safeName}`;
+    // 3. URL Construction
+    const gameTypeId = 'SOLO';
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 
-    console.log(`Connecting to: ${socketUrl}`);
-    socket.value = new WebSocket(socketUrl);
+    // FIX: window.location.hostname gives just the IP (e.g., '192.168.1.128' or 'localhost')
+    // We explicitly attach port 8000 to ensure we hit the Backend, not the Frontend (5173).
+    const apiHost = window.location.hostname;
+    const apiPort = '8000';
+
+    // Construct the correct backend URL
+    const wsUrl = `${protocol}://${apiHost}:${apiPort}/games/${gameTypeId}/ws?token=${token}`;
+
+    console.log(`Connecting to Backend: ${wsUrl}`);
+    socket.value = new WebSocket(wsUrl);
+
     socket.value.onopen = () => {
+      console.log("Connected to Solo Lobby WebSocket");
       isConnected.value = true;
       currentError.value = null;
+
+      playerName.value = displayName;
+      statusCheck();
     };
 
     socket.value.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         handleMessage(data);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
-        // console.log("Raw message:", event.data);
+        console.error("Failed to parse websocket message", e);
       }
     };
 
-    socket.value.onclose = () => {
+    socket.value.onclose = (event) => {
+      console.log("WebSocket Closed", event.code, event.reason);
       isConnected.value = false;
       players.value = [];
       availableGames.value = [];
       currentGameId.value = null;
+
+      if (event.code === 1008 || event.code === 403) {
+        currentError.value = "Session expired. Please log in again.";
+        if(router) router.push('/auth/login');
+      } else if (!event.wasClean) {
+        // 1006 often falls here
+        currentError.value = "Connection lost. Ensure the backend is running on port 8000.";
+      }
+    };
+
+    socket.value.onerror = (error) => {
+      console.error("WebSocket Error:", error);
     };
   };
 
@@ -94,9 +122,6 @@ export function useGameWebSocket() {
   }
 
   const handleMessage = (data: any) => {
-
-    // console.log("Handling message:", data);
-
     switch (data.event) {
 
       // --- Global Lobby Events ---
@@ -104,44 +129,48 @@ export function useGameWebSocket() {
         availableGames.value = data.games || [];
         break;
 
-      case "player_back_to_lobby":
-
-  if (data.player_states) playerStates.value = data.player_states;
-  break;
+      case "system":
+        console.log("System:", data.message);
+        if (data.message && data.message.startsWith("Welcome")) {
+            const name = data.message.split(' ')[1];
+            if(name) playerName.value = name;
+        }
+        break;
 
       case "game_created":
+      case "game_joined":
+        console.log(`Joined game ${data.game_id}`);
         currentGameId.value = data.game_id;
-        hostId.value = data.creator;
-        players.value = data.players;
-        playerNames.value = data.player_names;
+
+        if (data.creator) hostId.value = data.creator;
+        if (data.host_id) hostId.value = data.host_id;
+        if (data.players) players.value = data.players;
+        if (data.player_names) playerNames.value = data.player_names;
         if (data.player_states) playerStates.value = data.player_states;
+
         gameState.value = "LOBBY";
         resetInGameState();
         break;
 
-        case "game_settings_saved":
-          const updatedSettings = data.settings;
-          gameSettings.value = {
-            turnTimer: updatedSettings.turn_timeout_seconds,
-            stackingMode: updatedSettings.stacking_mode,
-            afkBehavior: updatedSettings.afk_behavior,
-            forfeitAfterSkips: updatedSettings.max_afk_strikes > 0
-          };
+      case "player_back_to_lobby":
+        if (data.player_states) playerStates.value = data.player_states;
+        break;
 
-          break;
+      case "game_settings_saved":
+        const updatedSettings = data.settings;
+        gameSettings.value = {
+          turnTimer: updatedSettings.turn_timeout_seconds,
+          stackingMode: updatedSettings.stacking_mode,
+          afkBehavior: updatedSettings.afk_behavior,
+          forfeitAfterSkips: updatedSettings.max_afk_strikes > 0
+        };
+        break;
 
       case "player_joined":
-
         players.value = data.players;
         playerNames.value = data.player_names;
         hostId.value = data.host_id;
         if (data.player_states) playerStates.value = data.player_states;
-
-        if (data.new_player_id === playerId.value) {
-          currentGameId.value = data.game_id;
-          gameState.value = "LOBBY";
-          resetInGameState();
-        }
         break;
 
       case "player_left":
@@ -151,17 +180,16 @@ export function useGameWebSocket() {
         playerNames.value = newNames;
 
         if (data.player_id === hostId.value && players.value.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-           // @ts-expect-error
+          // @ts-expect-error type safety
           hostId.value = players.value[0];
         }
         break;
 
       case "game_started":
         gameState.value = "PLAYING";
+        // Fallthrough
 
       case "game_update":
-        console.log("Game Update:", data);
         if (data.current_active_color) currentActiveColor.value = data.current_active_color;
         if (data.top_card) topCard.value = data.top_card;
         if (data.current_player) currentPlayerId.value = data.current_player;
@@ -175,10 +203,10 @@ export function useGameWebSocket() {
         }
 
         if (data.game_event) event.value = data.game_event;
-
         break;
 
       case "error":
+        console.error("Server Error:", data.message);
         currentError.value = data.message;
         setTimeout(() => (currentError.value = null), 5000);
         break;
@@ -196,16 +224,23 @@ export function useGameWebSocket() {
   // --- Actions ---
 
   const statusCheck = () => {
-    if (socket.value) {
+    if (socket.value && socket.value.readyState === WebSocket.OPEN) {
       socket.value.send(JSON.stringify({ action: "status_check" }));
     }
   };
 
-  const createGame = (displayName: string) => {
-    if (!socket.value) initConnection(displayName);
-    setTimeout(() => {
-      socket.value?.send(JSON.stringify({ action: "create_game" }));
-    }, 100);
+  const createGame = (options: { maxPlayers: number; buyIn: number }) => {
+    if (socket.value && socket.value.readyState === WebSocket.OPEN) {
+      socket.value.send(JSON.stringify({
+        action: "create_game",
+        extra: {
+          max_players: options.maxPlayers,
+          buy_in: options.buyIn
+        }
+      }));
+    } else {
+      console.warn("Socket not ready to create game");
+    }
   };
 
   const saveGameSettings = () => {
@@ -214,13 +249,10 @@ export function useGameWebSocket() {
     }
   };
 
-  const joinGame = (gameId: string, displayName: string) => {
-    if (!socket.value) initConnection(displayName);
-    setTimeout(() => {
-      socket.value?.send(
-        JSON.stringify({ action: "join_game", game_id: gameId }),
-      );
-    }, 100);
+  const joinGame = (gameId: string) => {
+    if (socket.value && socket.value.readyState === WebSocket.OPEN) {
+        socket.value.send(JSON.stringify({ action: "join_game", game_id: gameId }));
+    }
   };
 
   const leaveGame = () => {
@@ -231,8 +263,6 @@ export function useGameWebSocket() {
       players.value = [];
       currentGameId.value = null;
       resetInGameState();
-    } else {
-      console.warn("Tried to leave game when not connected!");
     }
   };
 
@@ -269,10 +299,7 @@ export function useGameWebSocket() {
   const drawCard = (advanceTurn: boolean = true) => {
     try {
       lockDrawableCardPile.value = true;
-      console.log("Drawing card...");
       if (socket.value) { socket.value.send(JSON.stringify({action: "process_turn", extra: {action: "draw_card_from_middle", advance_turn: advanceTurn}})); }
-    } catch (e) {
-      console.log("Error drawing card:", e);
     } finally {
       lockDrawableCardPile.value = false;
     }
@@ -290,7 +317,6 @@ export function useGameWebSocket() {
   const isMyTurn = computed(() => playerId.value === currentPlayerId.value);
 
   return {
-    // State
     isConnected,
     currentError,
     playerId,
@@ -310,12 +336,8 @@ export function useGameWebSocket() {
     topCard,
     currentPlayerId,
     availableGames,
-
-    // Computeds
     isHost,
     isMyTurn,
-
-    // Actions
     initConnection,
     disconnect,
     statusCheck,

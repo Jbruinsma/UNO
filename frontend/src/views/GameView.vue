@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import HomeLanding from '../components/LandingPage.vue';
-import { useGameWebSocket } from '../composables/useGameWebSocket';
+import { useSoloGameWebSocket } from '../composables/useSoloGameWebSocket.ts';
 import Lobby from "@/components/Lobby.vue";
 import GameTable from "@/components/GameTable.vue";
 import { useRouter } from 'vue-router';
 
-const { gameState } = useGameWebSocket();
+const { gameState } = useSoloGameWebSocket();
 const router = useRouter();
 
 const navigateToLogin = () => {

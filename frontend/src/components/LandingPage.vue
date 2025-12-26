@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useGameWebSocket } from '../composables/useGameWebSocket.ts';
+import { useSoloGameWebSocket } from '../composables/useSoloGameWebSocket.ts';
 import { Filter } from 'bad-words';
 
 const {
@@ -11,7 +11,7 @@ const {
   joinGame,
   currentError,
   playerName
-} = useGameWebSocket();
+} = useSoloGameWebSocket();
 
 const filter = new Filter();
 const nameError = ref('');

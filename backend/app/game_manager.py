@@ -1,10 +1,10 @@
 import random
 from typing import Dict, List, Optional, Set
 
-from backend.app.pydantic_models.game import Game
-from backend.app.pydantic_models.game_settings import GameSettings, StackingMode, AFKBehavior
+from app.pydantic_models.game import Game
+from app.pydantic_models.game_settings import GameSettings, StackingMode, AFKBehavior
 # Assuming these imports exist in your project structure
-from backend.app.utils import create_deck, SPECIAL_CARDS, WILD_CARDS, advance_turn_counter, retrieve_card_info, \
+from app.utils import create_deck, SPECIAL_CARDS, WILD_CARDS, advance_turn_counter, retrieve_card_info, \
     REGULAR_CARDS
 
 

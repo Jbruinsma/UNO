@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { useGameWebSocket } from '../composables/useGameWebSocket';
+import { useSoloGameWebSocket } from '../composables/useSoloGameWebSocket.ts';
 
 const {
   currentGameId,
@@ -15,7 +15,7 @@ const {
   saveGameSettings,
   leaveGame,
   startGame
-} = useGameWebSocket();
+} = useSoloGameWebSocket();
 
 const showNotification = ref<boolean>(false);
 const showSettingsModal = ref<boolean>(false);

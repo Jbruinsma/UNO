@@ -5,15 +5,14 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.future import select
 
 
-from backend.app.security import verify_token
-from backend.app.db import async_session
-from backend.app.models import GameSession, GameSessionStatus, User
+from app.security import verify_token
+from app.db import async_session
+from app.models import GameSession, GameSessionStatus, User
 
-# --- App Dependencies ---
-from backend.app.dependencies import connection_manager, game_manager
-from backend.app.pydantic_models.game import Game
-from backend.app.utils import generate_game_id
-from backend.app.websocket_utils import (
+from app.dependencies import connection_manager, game_manager
+from app.pydantic_models.game import Game
+from app.utils import generate_game_id
+from app.websocket_utils import (
     broadcast_lobby_state,
     broadcast_to_room,
     send_game_update,
@@ -42,15 +41,16 @@ async def get_current_user_ws(token: str) -> Optional[User]:
         return None
 
 
-@router.websocket("/ws")  # Removed {client_id} from URL path
+@router.websocket("/ws")
 async def websocket_endpoint(
         websocket: WebSocket,
-        token: str = Query(...)  # Token is passed as ?token=...
+        token: str = Query(...)
 ) -> None:
     """
-    Authenticated WebSocket endpoint.
+    Authenticated WebSocket endpoint for SOLO game lobby and gameplay.
     """
-    # 1. Authenticate before accepting
+
+    # Authenticate before accepting
     user = await get_current_user_ws(token)
 
     if not user:
@@ -60,10 +60,10 @@ async def websocket_endpoint(
     client_id = str(user.user_id)
     client_display_name = user.username
 
-    # 2. Accept Connection
+    # Accept Connection
     await connection_manager.connect(websocket, client_id, client_display_name)
 
-    # 3. Send Initial Lobby State
+    # Send Initial Lobby State
     initial_lobby_data = await get_database_lobby_info()
     await connection_manager.send_personal_message(json.dumps({
         "event": "lobby_update",
@@ -90,25 +90,26 @@ async def websocket_endpoint(
                     await broadcast_lobby_state()
 
                 elif action == "create_game":
+                    max_players: int = extra.get("max_players", 10)
+                    buy_in_fee: float = extra.get("buy_in", 1.00)
+
                     new_game_id: str = generate_game_id()
                     while game_manager.get_game(new_game_id):
                         new_game_id = generate_game_id()
 
-                    # Update In-Memory Game Manager
                     game_manager.create_game(new_game_id, client_id, client_display_name)
                     current_game_id = new_game_id
 
-                    # Update Database (Async)
                     async with async_session() as session:
                         try:
                             new_session = GameSession(
-                                game_type_id="SOLO",
-                                room_code=new_game_id,
-                                host_user_id=client_id,  # Validated User ID
-                                status=GameSessionStatus.WAITING,
-                                current_players=1,
-                                max_players=4,
-                                buy_in_amount=0.00
+                                game_type_id= "SOLO",
+                                room_code= new_game_id,
+                                host_user_id= client_id,
+                                status= GameSessionStatus.WAITING,
+                                current_players= 1,
+                                max_players= max_players,
+                                buy_in_amount= buy_in_fee
                             )
                             session.add(new_session)
                             await session.commit()

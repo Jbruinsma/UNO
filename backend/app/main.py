@@ -46,4 +46,6 @@ async def root() -> Dict[str, str]:
     Basic health check endpoint.
     """
 
-    return {"message": "UNO WebSocket server is running."}
+    return {
+        "message": "UNO WebSocket server is running."
+    }

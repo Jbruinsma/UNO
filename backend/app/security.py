@@ -9,8 +9,8 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.db import get_session
-from backend.app.models import User
+from app.db import get_session
+from app.models import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

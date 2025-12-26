@@ -2,7 +2,7 @@ from typing import List, Dict, Optional
 
 from pydantic import BaseModel
 
-from backend.app.pydantic_models.game_settings import GameSettings
+from app.pydantic_models.game_settings import GameSettings
 
 
 class Game(BaseModel):

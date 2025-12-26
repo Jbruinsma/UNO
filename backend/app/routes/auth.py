@@ -4,14 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 
-from backend.app.models import User
-from backend.app.pydantic_models.incoming.login_credentials import LoginCredentials
-from backend.app.pydantic_models.incoming.registration_credentials import RegistrationCredentials
+from app.models import User
+from app.pydantic_models.incoming.login_credentials import LoginCredentials
+from app.pydantic_models.incoming.registration_credentials import RegistrationCredentials
 
 
-from backend.app.db import get_session
-from backend.app.security import hash_password, verify_password, create_access_token
-from backend.app.utils import str_to_date_iso
+from app.db import get_session
+from app.security import hash_password, verify_password, create_access_token
+from app.utils import str_to_date_iso
 
 router = APIRouter()
 
