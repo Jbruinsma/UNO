@@ -19,6 +19,7 @@ const maxAllowedBuyIn = computed(() => {
 const maxPlayers = ref(4);
 const buyIn = ref(0);
 const buyInDisplay = ref("");
+const isPrivate = ref(false); // New state for privacy
 const error = ref<string | null>(null);
 
 
@@ -94,7 +95,8 @@ const handleCreate = () => {
 
   emit('create', {
     maxPlayers: maxPlayers.value,
-    buyIn: buyIn.value
+    buyIn: buyIn.value,
+    isPrivate: isPrivate.value
   });
 };
 
@@ -104,6 +106,7 @@ watch(() => props.isOpen, (isOpen) => {
     buyInDisplay.value = "";
     error.value = null;
     maxPlayers.value = 4;
+    isPrivate.value = false;
   }
 });
 </script>
@@ -117,6 +120,27 @@ watch(() => props.isOpen, (isOpen) => {
       </div>
 
       <div class="modal-body">
+
+        <div class="form-group">
+          <div class="label-row">
+            <label>Visibility</label>
+            <span class="value-badge" :class="isPrivate ? 'private' : 'public'">
+              {{ isPrivate ? 'PRIVATE' : 'PUBLIC' }}
+            </span>
+          </div>
+
+          <div class="toggle-container" @click="isPrivate = !isPrivate">
+            <div class="toggle-track">
+              <div class="toggle-option" :class="{ active: !isPrivate }">Public</div>
+              <div class="toggle-option" :class="{ active: isPrivate }">Private</div>
+              <div class="toggle-slider" :class="{ right: isPrivate }"></div>
+            </div>
+          </div>
+
+          <div class="helper-text">
+            {{ isPrivate ? 'Requires a code to join. Hidden from lobby list.' : 'Visible in the lobby for anyone to join.' }}
+          </div>
+        </div>
 
         <div class="form-group">
           <div class="label-row">
@@ -215,6 +239,26 @@ watch(() => props.isOpen, (isOpen) => {
 .label-row { display: flex; justify-content: space-between; align-items: center; }
 label { color: #d1d5db; font-weight: 600; font-size: 0.9rem; }
 .value-badge { background: #374151; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-family: monospace; }
+.value-badge.public { color: #34d399; background: rgba(52, 211, 153, 0.1); }
+.value-badge.private { color: #f87171; background: rgba(248, 113, 113, 0.1); }
+
+
+.toggle-container { cursor: pointer; user-select: none; }
+.toggle-track {
+  display: flex; background: #111827; border: 1px solid #374151;
+  border-radius: 8px; position: relative; height: 40px; align-items: center;
+}
+.toggle-option {
+  flex: 1; text-align: center; z-index: 2; font-weight: 600; font-size: 0.9rem;
+  transition: color 0.3s; color: #6b7280;
+}
+.toggle-option.active { color: #1f2937; }
+.toggle-slider {
+  position: absolute; top: 2px; bottom: 2px; width: calc(50% - 2px);
+  background: #facc15; border-radius: 6px; transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  left: 2px; z-index: 1;
+}
+.toggle-slider.right { transform: translateX(100%); }
 
 .btn-max {
   background: rgba(250, 204, 21, 0.1); color: #facc15; border: 1px solid rgba(250, 204, 21, 0.2);

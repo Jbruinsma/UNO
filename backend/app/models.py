@@ -40,7 +40,9 @@ class UserStatus(enum.Enum):
     SUSPENDED = "SUSPENDED"
     DEACTIVATED = "DEACTIVATED"
 
-
+class SessionType(enum.Enum):
+    PUBLIC = "PUBLIC"
+    PRIVATE = "PRIVATE"
 
 class User(Base):
     __tablename__ = "users"
@@ -83,6 +85,7 @@ class GameSession(Base):
     game_type_id = Column(String(20), ForeignKey("game_catalog.game_type_id"), nullable=False)
     room_code = Column(String(10), unique=True, nullable=False)
     host_user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    room_type = Column(Enum(SessionType), default=SessionType.PUBLIC)
     status = Column(Enum(GameSessionStatus), default=GameSessionStatus.WAITING)
     current_players = Column(Integer, default=1)
     max_players = Column(Integer, nullable=False, default=10)

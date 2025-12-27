@@ -1,3 +1,4 @@
+import enum
 import json
 from typing import Optional, Dict
 
@@ -18,6 +19,8 @@ from app.websocket_utils import (
     send_game_update,
     get_database_lobby_info
 )
+
+from app.models import SessionType
 
 router = APIRouter()  # /games/SOLO/
 
@@ -90,6 +93,10 @@ async def websocket_endpoint(
                     await broadcast_lobby_state()
 
                 elif action == "create_game":
+
+                    is_private: bool = extra.get("is_private", False)
+                    room_type: enum.Enum = SessionType.PRIVATE if is_private else SessionType.PUBLIC
+
                     max_players: int = extra.get("max_players", 10)
                     buy_in_fee: float = extra.get("buy_in", 1.00)
 
@@ -106,6 +113,7 @@ async def websocket_endpoint(
                                 game_type_id= "SOLO",
                                 room_code= new_game_id,
                                 host_user_id= client_id,
+                                room_type= room_type,
                                 status= GameSessionStatus.WAITING,
                                 current_players= 1,
                                 max_players= max_players,
@@ -125,13 +133,14 @@ async def websocket_endpoint(
 
                     response = {
                         "event": "game_created",
-                        "game_id": new_game_id,
+                        "gameId": new_game_id,
                         "creator": client_id,
                         "players": game_state.players,
-                        "player_names": game_state.player_names,
+                        "playerNames": game_state.player_names,
+                        "playerStates": game_state.player_states,
                         "message": f"Room {new_game_id} created."
                     }
-                    await broadcast_to_room(new_game_id, response)
+                    await connection_manager.send_personal_message(json.dumps(response), client_id)
 
                 elif action == "save_game_settings":
                     if current_game_id:

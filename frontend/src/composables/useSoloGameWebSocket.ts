@@ -1,18 +1,19 @@
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
+import type {Game, GameState, SoloGameSettings} from "@/types.ts";
 
 // Global state (Singleton)
 const socket = ref<WebSocket | null>(null);
-const isConnected = ref(false);
+const isConnected = ref<boolean>(false);
 const currentError = ref<string | null>(null);
 
 // Game State
 const playerId = ref<string>("");
 const playerName = ref<string>("");
 const currentGameId = ref<string | null>(null);
-const gameState = ref<"LANDING" | "LOBBY" | "PLAYING">("LANDING");
+const gameState = ref<GameState>("LANDING");
 const playerStates = ref<Record<string,"playing" | "ready">>({});
-const gameSettings = ref<Record<string, any>>({
+const gameSettings = ref<SoloGameSettings>({
   turnTimer: 30,
   stackingMode: 'off',
   afkBehavior: 'draw_skip',
@@ -23,7 +24,7 @@ const gameSettings = ref<Record<string, any>>({
 const hostId = ref<string>("");
 const players = ref<string[]>([]);
 const playerNames = ref<Record<string, string>>({});
-const availableGames = ref<any[]>([]);
+const availableGames = ref<Game[]>([]);
 
 // --- In-Game State ---
 const myHand = ref<string[]>([]);
@@ -42,7 +43,6 @@ export function useSoloGameWebSocket() {
     // 1. Prevent double connections
     if (socket.value?.readyState === WebSocket.OPEN) return;
 
-    // 2. Auth & Token Logic
     const token = localStorage.getItem('token');
     if (!token) {
       console.error("No access token found. Redirecting to login.");
@@ -50,16 +50,10 @@ export function useSoloGameWebSocket() {
       return;
     }
 
-    // 3. URL Construction
     const gameTypeId = 'SOLO';
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-
-    // FIX: window.location.hostname gives just the IP (e.g., '192.168.1.128' or 'localhost')
-    // We explicitly attach port 8000 to ensure we hit the Backend, not the Frontend (5173).
     const apiHost = window.location.hostname;
     const apiPort = '8000';
-
-    // Construct the correct backend URL
     const wsUrl = `${protocol}://${apiHost}:${apiPort}/games/${gameTypeId}/ws?token=${token}`;
 
     console.log(`Connecting to Backend: ${wsUrl}`);
@@ -69,9 +63,7 @@ export function useSoloGameWebSocket() {
       console.log("Connected to Solo Lobby WebSocket");
       isConnected.value = true;
       currentError.value = null;
-
       playerName.value = displayName;
-      statusCheck();
     };
 
     socket.value.onmessage = (event) => {
@@ -88,14 +80,12 @@ export function useSoloGameWebSocket() {
       isConnected.value = false;
       players.value = [];
       availableGames.value = [];
-      currentGameId.value = null;
 
       if (event.code === 1008 || event.code === 403) {
         currentError.value = "Session expired. Please log in again.";
         if(router) router.push('/auth/login');
       } else if (!event.wasClean) {
-        // 1006 often falls here
-        currentError.value = "Connection lost. Ensure the backend is running on port 8000.";
+        currentError.value = "Connection lost.";
       }
     };
 
@@ -106,6 +96,8 @@ export function useSoloGameWebSocket() {
 
   const disconnect = () => {
     if (socket.value) {
+      socket.value.onclose = null;
+
       socket.value.close();
       socket.value = null;
       isConnected.value = false;
@@ -122,32 +114,54 @@ export function useSoloGameWebSocket() {
   }
 
   const handleMessage = (data: any) => {
-    switch (data.event) {
+    // Console log reduced to avoid noise, uncomment for debug
+    console.log("Received:", data);
 
-      // --- Global Lobby Events ---
+    switch (data.event) {
       case "lobby_update":
         availableGames.value = data.games || [];
+        console.log(isConnected.value);
         break;
 
       case "system":
-        console.log("System:", data.message);
         if (data.message && data.message.startsWith("Welcome")) {
             const name = data.message.split(' ')[1];
             if(name) playerName.value = name;
         }
         break;
 
-      case "game_created":
+        case "game_created":
+
+          // {
+          //   "event": "game_created",
+          //   "game_id": "QZPD",
+          //   "creator": "278a16a9-aaa9-49b0-b567-8d7a5caa5738",
+          //   "players": [
+          //     "278a16a9-aaa9-49b0-b567-8d7a5caa5738"
+          // ],
+          //   "player_names": {
+          //     "278a16a9-aaa9-49b0-b567-8d7a5caa5738": "justin"
+          // },
+          //   "message": "Room QZPD created."
+          // }
+
+          currentGameId.value = data.gameId;
+          hostId.value = data.creator;
+          players.value = data.players;
+          playerNames.value = data.playerNames;
+          playerStates.value = data.playerStates;
+          gameState.value = "LOBBY";
+          resetInGameState();
+          break;
+
       case "game_joined":
         console.log(`Joined game ${data.game_id}`);
         currentGameId.value = data.game_id;
-
         if (data.creator) hostId.value = data.creator;
         if (data.host_id) hostId.value = data.host_id;
         if (data.players) players.value = data.players;
         if (data.player_names) playerNames.value = data.player_names;
         if (data.player_states) playerStates.value = data.player_states;
-
         gameState.value = "LOBBY";
         resetInGameState();
         break;
@@ -178,7 +192,6 @@ export function useSoloGameWebSocket() {
         const newNames = { ...playerNames.value };
         delete newNames[data.player_id];
         playerNames.value = newNames;
-
         if (data.player_id === hostId.value && players.value.length > 0) {
           // @ts-expect-error type safety
           hostId.value = players.value[0];
@@ -196,12 +209,10 @@ export function useSoloGameWebSocket() {
         if (data.hand) myHand.value = data.hand;
         if (data.card_counts) otherPlayerCardCounts.value = data.card_counts;
         if (data.player_states) playerStates.value = data.player_states;
-
         if (data.direction) {
           const newDirection = data.direction;
           if ([-1, 1].includes(newDirection) && newDirection !== direction.value) direction.value = newDirection;
         }
-
         if (data.game_event) event.value = data.game_event;
         break;
 
@@ -229,17 +240,12 @@ export function useSoloGameWebSocket() {
     }
   };
 
-  const createGame = (options: { maxPlayers: number; buyIn: number }) => {
+  const createGame = (options: { maxPlayers: number; buyIn: number; isPrivate: boolean }) => {
     if (socket.value && socket.value.readyState === WebSocket.OPEN) {
       socket.value.send(JSON.stringify({
         action: "create_game",
-        extra: {
-          max_players: options.maxPlayers,
-          buy_in: options.buyIn
-        }
+        extra: { max_players: options.maxPlayers, buy_in: options.buyIn , is_private: options.isPrivate}
       }));
-    } else {
-      console.warn("Socket not ready to create game");
     }
   };
 
@@ -250,9 +256,15 @@ export function useSoloGameWebSocket() {
   };
 
   const joinGame = (gameId: string) => {
-    if (socket.value && socket.value.readyState === WebSocket.OPEN) {
-        socket.value.send(JSON.stringify({ action: "join_game", game_id: gameId }));
+    // Simple retry logic if socket is connecting
+    const sendMessage = () => {
+      if (socket.value && socket.value.readyState === WebSocket.OPEN) {
+         socket.value.send(JSON.stringify({ action: "join_game", game_id: gameId }));
+      } else if (socket.value && socket.value.readyState === WebSocket.CONNECTING) {
+         setTimeout(sendMessage, 200);
+      }
     }
+    sendMessage();
   };
 
   const leaveGame = () => {
@@ -267,31 +279,22 @@ export function useSoloGameWebSocket() {
   };
 
   const startGame = () => {
-    if (socket.value) {
-      socket.value.send(JSON.stringify({ action: "start_game" }));
-    }
+    if (socket.value) socket.value.send(JSON.stringify({ action: "start_game" }));
   };
 
   const endGame = () => {
-    if (socket.value) {
-      socket.value.send(JSON.stringify({ action: "end_game" }));
-    }
+    if (socket.value) socket.value.send(JSON.stringify({ action: "end_game" }));
   };
 
   const backToLobby = () => {
-    if (socket.value) {
-      socket.value.send(JSON.stringify({ action: "back_to_lobby" }));
-    }
+    if (socket.value) socket.value.send(JSON.stringify({ action: "back_to_lobby" }));
   }
 
   const playCard = (card: string) => {
     if (socket.value) {
         socket.value.send(JSON.stringify({
           action: "process_turn",
-          extra: {
-            action: "play_card",
-            card: card,
-          }
+          extra: { action: "play_card", card: card }
         }));
     }
   };

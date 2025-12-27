@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useSoloGameWebSocket } from '../composables/useSoloGameWebSocket.ts';
-import Lobby from "@/components/Lobby.vue";
+import SoloLobby from "@/components/solo/SoloLobby.vue";
 import GameTable from "@/components/GameTable.vue";
 import { useRouter } from 'vue-router';
 import LobbySelection from "@/components/LobbySelection.vue";
@@ -21,7 +21,7 @@ const navigateToLogin = () => {
     />
 
     <div v-else-if="gameState === 'LOBBY'" class="lobby-placeholder">
-      <Lobby></Lobby>
+      <SoloLobby></SoloLobby>
     </div>
 
     <div v-else-if="gameState === 'PLAYING'" class="game-placeholder">

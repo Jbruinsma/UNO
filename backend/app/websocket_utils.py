@@ -10,7 +10,8 @@ from sqlalchemy.orm import selectinload
 
 
 from app.db import async_session
-from app.models import GameSession, GameSessionStatus
+from app.models import GameSession, GameSessionStatus, SessionType
+
 
 async def get_database_lobby_info():
     """
@@ -22,22 +23,21 @@ async def get_database_lobby_info():
         query = (
             select(GameSession)
             .options(selectinload(GameSession.host))
-            .where(GameSession.status == GameSessionStatus.WAITING)
+            .where(GameSession.status == GameSessionStatus.WAITING, GameSession.room_type == SessionType.PUBLIC)
         )
         result = await session.execute(query)
         active_sessions = result.scalars().all()
 
         return [
             {
-                "game_id": s.room_code,
-                # specific safe check in case host is somehow None
-                "host_name": s.host.username if s.host else "Unknown",
-                "player_count": s.current_players,
-                "max_players": s.max_players,
-                "buy_in": float(s.buy_in_amount),
-                "is_active": True
+                "gameId": session.room_code,
+                "hostName": session.host.username if session.host else "Unknown",
+                "playerCount": session.current_players,
+                "maxPlayers": session.max_players,
+                "buyIn": float(session.buy_in_amount),
+                "isActive": True
             }
-            for s in active_sessions
+            for session in active_sessions
         ]
 
 

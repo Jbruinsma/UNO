@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useSoloGameWebSocket } from '@/composables/useSoloGameWebSocket';
 import { fetchFromAPI } from "@/utils/api.ts";
 import CreateGameModal from '@/components/CreateGameModal.vue';
+import type {Game, GameState} from "@/types.ts";
 
 interface UserProfile {
   userId: string;
@@ -21,9 +22,10 @@ const gameTypeId = (route.params.id as string)?.toUpperCase() || 'SOLO';
 
 interface GameConnector {
   state: {
-    availableGames: any[];
+    availableGames: Game[];
     isConnected: boolean;
     error: string | null;
+    gameState: GameState;
   };
   actions: {
     initConnection: (name: string) => void;
@@ -42,7 +44,8 @@ const getGameConnector = (type: string): GameConnector | null => {
         state: {
           get availableGames() { return solo.availableGames.value },
           get isConnected() { return solo.isConnected.value },
-          get error() { return solo.currentError.value }
+          get error() { return solo.currentError.value },
+          get gameState() { return solo.gameState.value }
         },
         actions: {
           initConnection: solo.initConnection,
@@ -67,16 +70,32 @@ const balance = ref<number>(0.00);
 const privateCode = ref('');
 const isValidCode = computed(() => privateCode.value.length === 4);
 
+const sessionToJoin = ref<{ roomCode: string; buyIn: number } | null>(null);
+
 const sessions = computed(() => {
   if (!connector) return [];
-  return connector.state.availableGames.map((g: any) => ({
-    sessionId: g.game_id,
-    roomCode: g.game_id,
-    hostUsername: g.host_name || 'Unknown',
-    currentPlayers: g.player_count || 0,
-    maxPlayers: g.max_players || 4,
-    buyInAmount: g.buy_in || 0,
-    status: g.is_active ? 'IN_PROGRESS' : 'WAITING'
+
+  const games = [...connector.state.availableGames];
+
+  games.sort((a, b) => {
+    const buyInA = a.buyIn || 0;
+    const buyInB = b.buyIn || 0;
+    const canAffordA = balance.value >= buyInA;
+    const canAffordB = balance.value >= buyInB;
+
+    if (canAffordA && !canAffordB) return -1;
+    if (!canAffordA && canAffordB) return 1;
+    return 0;
+  });
+
+  return games.map((game: Game) => ({
+    sessionId: game.gameId,
+    roomCode: game.gameId,
+    hostUsername: game.hostName || 'Unknown',
+    currentPlayers: game.playerCount || 0,
+    maxPlayers: game.maxPlayers || 4,
+    buyInAmount: game.buyIn || 0,
+    status: game.isActive ? 'IN_PROGRESS' : 'WAITING'
   }));
 });
 
@@ -87,20 +106,46 @@ const openCreateModal = () => {
   showCreateModal.value = true;
 };
 
-const handleCreateGame = (options: { maxPlayers: number; buyIn: number }) => {
+const handleCreateGame = (options: { maxPlayers: number; buyIn: number; isPrivate: boolean }) => {
   if (!connector) return;
   connector.actions.createGame(options);
   showCreateModal.value = false;
 };
 
-const joinSession = (roomCode: string) => {
-  if (!roomCode || !connector) return;
-  connector.actions.joinGame(roomCode, currentUser.value);
+
+const promptJoin = (session: { roomCode: string, buyInAmount: number }) => {
+  sessionToJoin.value = {
+    roomCode: session.roomCode,
+    buyIn: session.buyInAmount
+  };
+};
+
+const cancelJoin = () => {
+  sessionToJoin.value = null;
+};
+
+const confirmJoin = () => {
+  if (!sessionToJoin.value || !connector) return;
+  connector.actions.joinGame(sessionToJoin.value.roomCode, currentUser.value);
+  sessionToJoin.value = null;
+  privateCode.value = '';
 };
 
 const handleJoinPrivate = () => {
   if (!isValidCode.value) return;
-  joinSession(privateCode.value.toUpperCase());
+  const code = privateCode.value.toUpperCase();
+
+  // Check if this private code corresponds to a visible session
+  const existingSession = sessions.value.find(s => s.roomCode === code);
+
+  if (existingSession) { promptJoin(existingSession); }
+  else {
+    // If it's a hidden/private game not in the list, show unknown buy-in
+    sessionToJoin.value = {
+      roomCode: code,
+      buyIn: -1
+    };
+  }
 };
 
 const formatCurrency = (val: number) => {
@@ -120,9 +165,6 @@ onMounted(async () => {
         balance.value = parseFloat(profile.currentBalance);
       }
       connector.actions.initConnection(currentUser.value);
-      if (connector.state.isConnected) {
-        connector.actions.statusCheck();
-      }
     } catch (error) {
       console.error("Error loading profile or connecting:", error);
       connector.actions.initConnection(currentUser.value);
@@ -131,9 +173,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (connector) {
-    connector.actions.disconnect();
-  }
+  if (!connector) return;
+  const state = connector.state?.gameState;
+  if (state === 'LANDING') connector.actions.disconnect();
 });
 
 const { currentGameId } = useSoloGameWebSocket();
@@ -239,13 +281,51 @@ watch(currentGameId, (newId) => {
             </div>
           </div>
 
-          <button @click="joinSession(session.roomCode)" class="btn-join" :disabled="session.currentPlayers >= session.maxPlayers">
-            {{ session.currentPlayers >= session.maxPlayers ? 'FULL' : 'JOIN TABLE' }}
+          <button
+            @click="promptJoin(session)"
+            class="btn-join"
+            :disabled="session.currentPlayers >= session.maxPlayers || balance < session.buyInAmount"
+          >
+            {{
+              session.currentPlayers >= session.maxPlayers ? 'FULL' :
+              balance < session.buyInAmount ? 'LOW FUNDS' : 'JOIN TABLE'
+            }}
           </button>
         </div>
       </div>
 
     </main>
+
+    <div v-if="sessionToJoin" class="modal-overlay" @click.self="cancelJoin">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Confirm Join</h3>
+        </div>
+        <div class="modal-body">
+          <p>You are joining Table <span class="highlight-text">#{{ sessionToJoin.roomCode }}</span>.</p>
+
+          <div class="cost-summary">
+            <span class="cost-label">Buy-In Required:</span>
+            <span class="cost-value" :class="{'unknown': sessionToJoin.buyIn === -1}">
+              {{ sessionToJoin.buyIn === -1 ? 'UNKNOWN' : formatCurrency(sessionToJoin.buyIn) }}
+            </span>
+          </div>
+
+          <p v-if="sessionToJoin.buyIn === -1" class="disclaimer warning">
+            This is a private room. The buy-in amount is not visible. Ensure you have sufficient funds before joining.
+          </p>
+          <p v-else class="disclaimer">
+            This amount will be deducted from your balance immediately.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" @click="cancelJoin">Cancel</button>
+          <button class="btn-confirm" @click="confirmJoin">
+            {{ sessionToJoin.buyIn === -1 ? 'Attempt Join' : 'Pay & Join' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <CreateGameModal
       :is-open="showCreateModal"
@@ -398,6 +478,24 @@ watch(currentGameId, (newId) => {
 .loading { text-align: center; margin-top: 3rem; color: #9ca3af; }
 .spinner { border: 4px solid rgba(255, 255, 255, 0.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: #facc15; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Modal Styles */
+.btn-cancel { background: #374151; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: bold; padding: 10px 20px; transition: background 0.2s; }
+.btn-cancel:hover { background: #4b5563; }
+.btn-confirm { background: #facc15; border: none; border-radius: 8px; color: #854d0e; cursor: pointer; font-weight: bold; padding: 10px 20px; transition: transform 0.2s; }
+.btn-confirm:hover { transform: translateY(-1px); }
+.cost-label { color: #9ca3af; font-size: 0.9rem; text-transform: uppercase; }
+.cost-summary { align-items: center; background: #374151; border-radius: 12px; display: flex; justify-content: space-between; margin: 1.5rem 0; padding: 1rem; }
+.cost-value { color: #facc15; font-family: 'Courier New', monospace; font-size: 1.4rem; font-weight: bold; }
+.cost-value.unknown { color: #f87171; letter-spacing: 1px; }
+.disclaimer { color: #ef4444; font-size: 0.85rem; margin-top: 0; text-align: center; }
+.disclaimer.warning { color: #facc15; }
+.highlight-text { color: white; font-weight: bold; }
+.modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+.modal-body { color: #d1d5db; line-height: 1.6; margin-top: 1rem; }
+.modal-content { background: #1f2937; border: 1px solid #374151; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); max-width: 400px; padding: 2rem; position: relative; width: 90%; }
+.modal-header h3 { color: white; font-size: 1.5rem; font-weight: bold; margin: 0; }
+.modal-overlay { align-items: center; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); bottom: 0; display: flex; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 1000; }
 
 @media (max-width: 768px) {
   .navbar { padding: 1rem; }
