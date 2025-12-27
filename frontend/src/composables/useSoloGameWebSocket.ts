@@ -119,8 +119,8 @@ export function useSoloGameWebSocket() {
 
     switch (data.event) {
       case "lobby_update":
+        if (gameState.value !== "LANDING") return;
         availableGames.value = data.games || [];
-        console.log(isConnected.value);
         break;
 
       case "system":
@@ -156,12 +156,13 @@ export function useSoloGameWebSocket() {
 
       case "game_joined":
         console.log(`Joined game ${data.game_id}`);
-        currentGameId.value = data.game_id;
-        if (data.creator) hostId.value = data.creator;
-        if (data.host_id) hostId.value = data.host_id;
+        if (!data.gameId) return;
+
+        currentGameId.value = data.gameId;
+        if (data.hostId) hostId.value = data.hostId;
         if (data.players) players.value = data.players;
-        if (data.player_names) playerNames.value = data.player_names;
-        if (data.player_states) playerStates.value = data.player_states;
+        if (data.playerNames) playerNames.value = data.playerNames;
+        if (data.playerStates) playerStates.value = data.playerStates;
         gameState.value = "LOBBY";
         resetInGameState();
         break;
@@ -182,9 +183,9 @@ export function useSoloGameWebSocket() {
 
       case "player_joined":
         players.value = data.players;
-        playerNames.value = data.player_names;
-        hostId.value = data.host_id;
-        if (data.player_states) playerStates.value = data.player_states;
+        playerNames.value = data.playerNames;
+        hostId.value = data.hostId;
+        if (data.playerStates) playerStates.value = data.playerStates;
         break;
 
       case "player_left":

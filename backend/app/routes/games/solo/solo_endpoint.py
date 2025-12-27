@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 
 from app.security import verify_token
 from app.db import async_session
-from app.models import GameSession, GameSessionStatus, User
+from app.models import GameSession, GameSessionStatus, User, SessionType
 
 from app.dependencies import connection_manager, game_manager
 from app.pydantic_models.game import Game
@@ -20,9 +20,8 @@ from app.websocket_utils import (
     get_database_lobby_info
 )
 
-from app.models import SessionType
 
-router = APIRouter()  # /games/SOLO/
+router = APIRouter()  # /games/SOLO
 
 
 async def get_current_user_ws(token: str) -> Optional[User]:
@@ -30,7 +29,7 @@ async def get_current_user_ws(token: str) -> Optional[User]:
     Validates the JWT token and returns the user object.
     """
     try:
-        payload = verify_token(token)  # Your existing JWT decode function
+        payload = verify_token(token)  # JWT decode function
         username = payload.get("sub")
         if not username:
             return None
@@ -182,18 +181,28 @@ async def websocket_endpoint(
 
                         await broadcast_lobby_state()
 
-                        response = {
+                        room_update = {
                             "event": "player_joined",
-                            "game_id": target_id,
-                            "host_id": game_state.host_id,
+                            "gameId": target_id,
                             "players": game_state.players,
-                            "player_names": game_state.player_names,
-                            "new_player_id": client_id,
-                            "new_player_name": client_display_name,
-                            "message": f"{client_display_name} has joined the game!",
-                            "player_states": game_state.player_states
+                            "playerNames": game_state.player_names,
+                            "hostId": game_state.host_id,
+                            "playerStates": game_state.player_states,
+                            "message": f"{client_display_name} has joined the game"
                         }
-                        await broadcast_to_room(target_id, response)
+
+                        await broadcast_to_room(target_id, room_update)
+
+                        response = {
+                            "event": "game_joined",
+                            "gameId": target_id,
+                            "hostId": game_state.host_id,
+                            "players": game_state.players,
+                            "playerNames": game_state.player_names,
+                            "playerStates": game_state.player_states,
+                        }
+
+                        await connection_manager.send_personal_message(json.dumps(response), client_id)
 
                 elif action == "leave_game":
                     if current_game_id:
